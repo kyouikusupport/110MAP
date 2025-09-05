@@ -211,7 +211,7 @@
     });
 
     // 任意：MapTiler Streets
-    const MAPTILER_KEY = ""; // 例: "pA1b2C3..."
+    const MAPTILER_KEY = "";
     const mapTilerStreets = MAPTILER_KEY
       ? L.tileLayer(`https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`, {
           maxZoom:20, minZoom:2, attribution:'&copy; MapTiler &copy; OpenStreetMap contributors'
@@ -221,10 +221,10 @@
     // 既定は OSM
     osmStd.addTo(map);
 
-    // ★ ここが変更点：UI上の「国土地理院 標準地図」は gsiStdAlt を指す。代替の選択肢は出さない。
+    // UI上の「国土地理院 標準地図」は gsiStdAlt を指す（代替の選択肢は出さない）
     const baseLayers = {
       "OpenStreetMap（標準）": osmStd,
-      "国土地理院 標準地図": gsiStdAlt,     // ← 代替タイルを割当
+      "国土地理院 標準地図": gsiStdAlt,
       "国土地理院 淡色地図": gsiPale,
       "国土地理院 航空写真": gsiPhoto,
       "Esri 航空写真": esriWorldImg
@@ -238,6 +238,8 @@
       clearAllMarkers();
       state.pins.forEach(pin=>{
         const marker = L.marker([pin.lat, pin.lng], { icon: icons[pin.color]||icons.blue, riseOnHover:true, draggable: state.isAdmin });
+
+        // ドラッグ終了：位置保存
         marker.on('dragend', async (ev)=>{
           const ll = ev.target.getLatLng();
           if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { lat:Number(ll.lat), lng:Number(ll.lng) }); await refreshRemotePins(); }
@@ -245,8 +247,18 @@
           if (marker.isPopupOpen()) marker.closePopup();
         });
 
+        // ホバー時の名称（ツールチップ）
         marker.bindTooltip(pin.name||'名称未設定', { sticky:true, direction:'top', className:'my-tooltip' });
+
+        // クリック/タップ時の挙動
         marker.on('click', ()=>{
+          if (!state.isAdmin) {
+            // 閲覧モード：名前だけをポップアップ表示
+            marker.bindPopup(`<div style="font-weight:700;">${escapeHtml(pin.name)}</div>`).openPopup();
+            return;
+          }
+
+          // 管理者モード：従来どおり編集UI（名称変更・カテゴリ変更・削除）
           const container = document.createElement('div');
           container.className='popup-form';
           const opts = ['shop','public','home'].map(k=>{
@@ -256,40 +268,35 @@
           }).join('');
           container.innerHTML = `
             <div style="font-weight:700; margin-bottom:6px;">${escapeHtml(pin.name)}</div>
-            <div class="tip">カテゴリ：${pin.category==='shop'?'お店':pin.category==='public'?'公共施設':'個人宅・塾'}<br>緯度:${pin.lat.toFixed(6)} / 経度:${pin.lng.toFixed(6)}</div>
-            ${state.isAdmin ? `
-              <div class="actions" style="margin-top:8px;">
-                <button class="btn" id="renameBtn">名称変更</button>
-                <label class="label" for="catSel" style="margin-left:0;">カテゴリ</label>
-                <select id="catSel" style="flex:1; min-width:120px;">${opts}</select>
-                <button class="btn" id="applyCatBtn">反映</button>
-                <button class="danger" id="delBtn">削除</button>
-              </div>
-              <div class="tip">※ドラッグで位置を微調整できます</div>
-            ` : `<div class="tip" style="margin-top:8px;">（閲覧モード）</div>`}
+            <div class="actions" style="margin-top:8px;">
+              <button class="btn" id="renameBtn">名称変更</button>
+              <label class="label" for="catSel" style="margin-left:0;">カテゴリ</label>
+              <select id="catSel" style="flex:1; min-width:120px;">${opts}</select>
+              <button class="btn" id="applyCatBtn">反映</button>
+              <button class="danger" id="delBtn">削除</button>
+            </div>
+            <div class="tip">※ドラッグで位置を微調整できます</div>
           `;
           marker.bindPopup(container).openPopup();
 
-          if (state.isAdmin) {
-            container.querySelector('#delBtn').addEventListener('click', async ()=>{
-              if (!confirm(`「${pin.name}」のピンを削除します。よろしいですか？`)) return;
-              if (USE_APPS_SCRIPT) { await deletePinRemote(pin.id); await refreshRemotePins(); }
-              else { deletePinLocal(pin.id); }
-            });
-            container.querySelector('#renameBtn').addEventListener('click', async ()=>{
-              const newName = prompt('新しい名称を入力してください', pin.name);
-              if (!newName || !newName.trim()) return;
-              if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { name:newName.trim() }); await refreshRemotePins(); }
-              else { renamePinLocal(pin.id, newName.trim()); }
-              marker.closePopup();
-            });
-            container.querySelector('#applyCatBtn').addEventListener('click', async ()=>{
-              const sel = container.querySelector('#catSel').value;
-              if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { category: sel, color:categoryToColor(sel) }); await refreshRemotePins(); }
-              else { changeCategoryLocal(pin.id, sel); }
-              marker.closePopup();
-            });
-          }
+          container.querySelector('#delBtn').addEventListener('click', async ()=>{
+            if (!confirm(`「${pin.name}」のピンを削除します。よろしいですか？`)) return;
+            if (USE_APPS_SCRIPT) { await deletePinRemote(pin.id); await refreshRemotePins(); }
+            else { deletePinLocal(pin.id); }
+          });
+          container.querySelector('#renameBtn').addEventListener('click', async ()=>{
+            const newName = prompt('新しい名称を入力してください', pin.name);
+            if (!newName || !newName.trim()) return;
+            if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { name:newName.trim() }); await refreshRemotePins(); }
+            else { renamePinLocal(pin.id, newName.trim()); }
+            marker.closePopup();
+          });
+          container.querySelector('#applyCatBtn').addEventListener('click', async ()=>{
+            const sel = container.querySelector('#catSel').value;
+            if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { category: sel, color:categoryToColor(sel) }); await refreshRemotePins(); }
+            else { changeCategoryLocal(pin.id, sel); }
+            marker.closePopup();
+          });
         });
 
         marker.addTo(map);
@@ -298,6 +305,7 @@
     }
     function fitToPins(){ if(!state.pins.length) return; const b=L.latLngBounds(state.pins.map(p=>[p.lat,p.lng])); map.fitBounds(b.pad(0.2)); }
 
+    // 地図クリック（管理者のみ追加）
     map.on('click', (e)=>{
       if (!state.isAdmin) return;
       const form = document.createElement('div');
@@ -312,7 +320,6 @@
         <input id="placeNameInput" type="text" placeholder="例：山田さん宅 / ローソン / 市役所" />
         <label class="label" style="margin-top:6px;">カテゴリ</label>
         <select id="categorySelect">${options}</select>
-        <div class="tip">位置：${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}</div>
         <div class="actions">
           <button class="primary" id="savePin">保存</button>
           <button class="btn" id="cancelPin">キャンセル</button>
@@ -469,7 +476,7 @@
         else alert('パスワードが違います');
       });
       els.logoutBtnLocal.addEventListener('click', ()=>{ setAdminMode(false); closeModal(); alert('閲覧モードになりました'); });
-      window.setAdminPassword = (newPw)=> localStorage.setItem('kids110_admin_pw', newPw); // 任意
+      window.setAdminPassword = (newPw)=> localStorage.setItem('kids110_admin_pw', newPw);
     }
 
     /************ 初期化 ************/
