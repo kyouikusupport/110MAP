@@ -183,10 +183,50 @@
       for (const mk of state.markers.values()) state.isAdmin ? mk.dragging.enable() : mk.dragging.disable();
     }
 
-    /************ 地図 ************/
+    /************ 地図（複数レイヤ対応） ************/
     const map = L.map('map', { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, zoomControl:true, attributionControl:true });
-    const osmStd = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:20, minZoom:3, attribution:'&copy; OpenStreetMap contributors' });
+
+    const osmStd = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom:20, minZoom:3, attribution:'&copy; OpenStreetMap contributors'
+    });
+    const gsiStd = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/standard/{z}/{x}/{y}.png', {
+      maxZoom:18, minZoom:2, attribution:'地理院タイル（標準地図）',
+      errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+    });
+    const gsiStdAlt = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+      maxZoom:18, minZoom:2, attribution:'地理院タイル（標準地図・代替）',
+      errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+    });
+    const gsiPale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
+      maxZoom:18, minZoom:2, attribution:'地理院タイル（淡色地図）'
+    });
+    const gsiPhoto = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
+      maxZoom:18, minZoom:2, attribution:'地理院タイル（写真）'
+    });
+    const esriWorldImg = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom:19, minZoom:2, attribution:'Tiles &copy; Esri'
+    });
+
+    // 任意：MapTiler Streets を使う場合はキーを設定して次の行を有効に
+    const MAPTILER_KEY = ""; // 例: "pA1b2C3..."
+    const mapTilerStreets = MAPTILER_KEY
+      ? L.tileLayer(`https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`, {
+          maxZoom:20, minZoom:2, attribution:'&copy; MapTiler &copy; OpenStreetMap contributors'
+        })
+      : null;
+
+    // 既定は OSM
     osmStd.addTo(map);
+    const baseLayers = {
+      "OpenStreetMap（標準）": osmStd,
+      "国土地理院 標準地図": gsiStd,
+      "国土地理院 標準地図（代替）": gsiStdAlt,
+      "国土地理院 淡色地図": gsiPale,
+      "国土地理院 航空写真": gsiPhoto,
+      "Esri 航空写真": esriWorldImg
+    };
+    if (mapTilerStreets) baseLayers["MapTiler Streets（POI多め）"] = mapTilerStreets;
+    L.control.layers(baseLayers, null, { position: 'topright', collapsed: true }).addTo(map);
 
     function clearAllMarkers(){ for (const m of state.markers.values()) m.remove(); state.markers.clear(); }
     function renderAllPins(){
@@ -313,25 +353,17 @@
       renderAllPins();
       if (state.pins.length && !refreshRemotePins._fitted) { fitToPins(); refreshRemotePins._fitted = true; }
     }
-    // （修正後）GASへPOST。Content-Typeヘッダーは付けない＝プリフライト回避
+    // GASへPOST：Headerを付けずプリフライト回避、textで受けてJSON解析
     async function postAS(payload){
       const body = JSON.stringify(Object.assign({}, payload, { adminKey: state.adminKey || '' }));
-      const res  = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'cors',
-        body
-      });
-
-      // GASはたまに text/plain で返すので、まずは text で受けてからJSON化
+      const res  = await fetch(APPS_SCRIPT_URL, { method:'POST', mode:'cors', body });
       const text = await res.text();
       let obj;
       try { obj = JSON.parse(text); }
       catch(e){ throw new Error('サーバ応答が不正です: ' + text.slice(0,200)); }
-
       if (!obj.ok) throw new Error(obj.error || 'POST failed');
       return obj;
     }
-
     const addPinRemote    = (pin)=> postAS({ op:'add', pin });
     const updatePinRemote = (id, fields)=> postAS({ op:'update', id, fields });
     const deletePinRemote = (id)=> postAS({ op:'delete', id });
@@ -384,7 +416,7 @@
       document.getElementById('helpBtn').addEventListener('click', ()=>{
         alert([
           USE_APPS_SCRIPT ? '【モード】Apps Script（全員で同じデータを共有）' : '【モード】LocalStorage（この端末のみ）',
-          '・地図の種類は右上レイヤ切替（OSM）',
+          '・右上のレイヤ切替で地図の種類を変更できます（国土地理院・航空写真など）。',
           '・管理者：地図クリックで追加／ポップアップから名称・カテゴリ変更／削除',
           '・管理者：ドラッグで位置を微調整',
           '・JSONのエクスポート／インポート対応（互換）',
