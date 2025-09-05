@@ -94,7 +94,7 @@
   <div id="map" tabindex="0" aria-label="子ども110番の家 地図"></div>
 
   <!-- 折りたたみ式 カテゴリ（凡例） -->
-  <details class="legend" aria-label="カテゴリ（凡例）">
+  <details id="legendToggle" class="legend" aria-label="カテゴリ（凡例）">
     <summary>カテゴリ</summary>
     <div class="content">
       <div class="item"><span class="dot blue" aria-hidden="true"></span>お店（青）</div>
@@ -181,6 +181,7 @@
       adminPasswordLocal: document.getElementById('adminPasswordLocal'),
       loginBtnLocal: document.getElementById('loginBtnLocal'),
       logoutBtnLocal: document.getElementById('logoutBtnLocal'),
+      legendToggle: document.getElementById('legendToggle'),
     };
 
     function uid(){ return 'm' + Math.random().toString(36).slice(2,8) + Date.now().toString(36); }
@@ -259,10 +260,10 @@
           if (marker.isPopupOpen()) marker.closePopup();
         });
 
-        // ホバー表示（名称）
+        // ホバー表示（名称のみ）
         marker.bindTooltip(pin.name||'名称未設定', { sticky:true, direction:'top', className:'my-tooltip' });
 
-        // クリック/タップ時
+        // クリック/タップ：閲覧モードは名前だけ、管理者は編集UI
         marker.on('click', ()=>{
           if (!state.isAdmin) {
             marker.bindPopup(`<div style="font-weight:700;">${escapeHtml(pin.name)}</div>`).openPopup();
@@ -497,7 +498,17 @@
       }
     })();
 
+    // ユーティリティ
     function escapeHtml(s){ return String(s).replace(/[&<>"'`=\/]/g, c=>({'&':'&amp;','<':'&lt;','>':'&#62;','"':'&quot;',"'":'&#39;','/':'&#x2F;','`':'&#x60','=':'&#x3D;'}[c])); }
+
+    // ▼ カテゴリパネル：外側クリックで自動クローズ
+    document.addEventListener('pointerdown', (e)=>{
+      const legend = els.legendToggle;
+      if (!legend) return;
+      if (legend.open && !legend.contains(e.target)) {
+        legend.open = false;
+      }
+    });
   </script>
 </body>
 </html>
