@@ -31,7 +31,6 @@
       background:#eef4ff; color:#1f4ad7; border:1px solid #d8e4ff; font-weight:600; }
     #map{ flex:1 1 auto; height: calc(100vh - 64px); } .leaflet-container{ outline:none; }
     .leaflet-tooltip.my-tooltip{ background:#111; color:#fff; border:none; border-radius:6px; padding:6px 8px; font-size:12px; box-shadow:0 6px 16px rgba(0,0,0,.25); }
-    .popup-form{ min-width:240px; } .popup-form .actions{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
 
     /* 折りたたみ式カテゴリ（凡例） */
     details.legend{
@@ -125,7 +124,17 @@
           <button id="loginBtnAS" class="primary">ログイン</button>
           <button id="logoutBtnAS" class="danger">ログアウト</button>
         </div>
-        <div class="tip">※ 管理者キーはサーバ側（Apps Script）に設定します。クライアントには保存されません。</div>
+
+        <!-- ▼ 管理者キー変更（ログイン中のみ表示） -->
+        <div id="changeKeyAS" style="display:none; border-top:1px solid #e5e7eb; margin-top:8px; padding-top:8px;">
+          <div class="tip" style="margin-bottom:6px;">管理者キー（パスワード）変更</div>
+          <div class="row"><input id="newKey1" type="password" placeholder="新しい管理者キー（8文字以上推奨）"></div>
+          <div class="row"><input id="newKey2" type="password" placeholder="新しい管理者キー（確認）"></div>
+          <div class="row"><button id="changeKeyBtnAS" class="primary">変更する</button></div>
+          <div class="tip">※ 現在のキーでログイン済みのときのみ変更できます。変更後は新しいキーで再ログインしてください。</div>
+        </div>
+
+        <div class="tip">※ 管理者キーはサーバ側（Apps Script）に保存されます。クライアントには保存しません。</div>
       </div>
 
       <!-- LocalStorage ログイン（フォールバック） -->
@@ -135,6 +144,15 @@
         <div class="row">
           <button id="loginBtnLocal" class="primary">ログイン</button>
           <button id="logoutBtnLocal" class="danger">ログアウト</button>
+        </div>
+        <!-- ▼ ローカル用パスワード変更（ログイン中のみ） -->
+        <div id="pwChangeLocal" style="display:none; border-top:1px solid #e5e7eb; margin-top:8px; padding-top:8px;">
+          <div class="tip" style="margin-bottom:6px;">ローカルパスワード変更</div>
+          <div class="row"><input id="curPw"  type="password" placeholder="現在のパスワード"></div>
+          <div class="row"><input id="newPw1" type="password" placeholder="新しいパスワード（8文字以上推奨）"></div>
+          <div class="row"><input id="newPw2" type="password" placeholder="新しいパスワード（確認）"></div>
+          <div class="row"><button id="changePwBtn" class="primary">変更する</button></div>
+          <div class="tip">※ ローカルパスワードはこの端末のブラウザに保存されます。</div>
         </div>
       </div>
 
@@ -177,10 +195,21 @@
       adminKey: document.getElementById('adminKey'),
       loginBtnAS: document.getElementById('loginBtnAS'),
       logoutBtnAS: document.getElementById('logoutBtnAS'),
+      changeKeyAS: document.getElementById('changeKeyAS'),
+      newKey1: document.getElementById('newKey1'),
+      newKey2: document.getElementById('newKey2'),
+      changeKeyBtnAS: document.getElementById('changeKeyBtnAS'),
+
       loginLocal: document.getElementById('loginLocal'),
       adminPasswordLocal: document.getElementById('adminPasswordLocal'),
       loginBtnLocal: document.getElementById('loginBtnLocal'),
       logoutBtnLocal: document.getElementById('logoutBtnLocal'),
+      pwChangeLocal: document.getElementById('pwChangeLocal'),
+      curPw: document.getElementById('curPw'),
+      newPw1: document.getElementById('newPw1'),
+      newPw2: document.getElementById('newPw2'),
+      changePwBtn: document.getElementById('changePwBtn'),
+
       legendToggle: document.getElementById('legendToggle'),
     };
 
@@ -448,44 +477,86 @@
 
     /************ モーダル＆ログイン ************/
     function openModal(){
-      document.getElementById('adminModal').classList.add('show');
-      document.getElementById('adminModal').setAttribute('aria-hidden','false');
+      els.adminModal.classList.add('show');
+      els.adminModal.setAttribute('aria-hidden','false');
       if (USE_APPS_SCRIPT) {
-        els.loginAS.style.display='block'; els.loginLocal.style.display='none'; els.adminKey.value='';
+        els.loginAS.style.display='block'; els.loginLocal.style.display='none';
+        els.adminKey.value='';
+        // ログイン中ならキー変更欄を表示
+        els.changeKeyAS.style.display = state.isAdmin ? 'block' : 'none';
       } else {
-        els.loginAS.style.display='none'; els.loginLocal.style.display='block'; els.adminPasswordLocal.value='';
+        els.loginAS.style.display='none'; els.loginLocal.style.display='block';
+        els.adminPasswordLocal.value='';
+        els.pwChangeLocal.style.display = state.isAdmin ? 'block' : 'none';
       }
     }
     function closeModal(){
-      document.getElementById('adminModal').classList.remove('show');
-      document.getElementById('adminModal').setAttribute('aria-hidden','true');
+      els.adminModal.classList.remove('show');
+      els.adminModal.setAttribute('aria-hidden','true');
     }
     els.gearBtn.addEventListener('click', openModal);
     els.modalClose.addEventListener('click', closeModal);
     els.modalBackdrop.addEventListener('click', closeModal);
     window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
 
-    // Apps Script ログイン
+    // Apps Script ログイン/ログアウト
     if (USE_APPS_SCRIPT) {
       els.loginBtnAS.addEventListener('click', ()=>{
         const key = (els.adminKey.value||'').trim();
         if (!key) return alert('管理者キーを入力してください');
-        state.adminKey = key; setAdminMode(true); closeModal(); alert('管理者モードになりました');
+        state.adminKey = key; setAdminMode(true);
+        // ログイン直後に変更欄を表示
+        els.changeKeyAS.style.display = 'block';
+        closeModal(); alert('管理者モードになりました');
       });
       els.logoutBtnAS.addEventListener('click', ()=>{
-        state.adminKey = null; setAdminMode(false); closeModal(); alert('閲覧モードになりました');
+        state.adminKey = null; setAdminMode(false);
+        closeModal(); alert('閲覧モードになりました');
+      });
+
+      // ▼ 管理者キー変更
+      els.changeKeyBtnAS.addEventListener('click', async ()=>{
+        if (!state.isAdmin) return alert('管理者ログイン中のみ変更できます');
+        const n1 = (els.newKey1.value||'').trim();
+        const n2 = (els.newKey2.value||'').trim();
+        if (!n1 || n1.length < 8) return alert('新しい管理者キーは8文字以上にしてください');
+        if (n1 !== n2) return alert('新しい管理者キーが一致しません');
+        try{
+          await postAS({ op:'changeKey', newKey: n1 });
+          state.adminKey = n1; // クライアント側も更新
+          els.newKey1.value = els.newKey2.value = '';
+          alert('管理者キーを変更しました。以後は新しいキーをご利用ください。');
+        }catch(e){
+          console.error(e);
+          alert('キー変更に失敗しました：' + (e.message || e));
+        }
       });
     } else {
       // LocalStorage ログイン
       const getPwLocal = ()=> localStorage.getItem('kids110_admin_pw') || ADMIN_PASSWORD_DEFAULT;
+      const setPwLocal = (v)=> localStorage.setItem('kids110_admin_pw', v);
+
       els.loginBtnLocal.addEventListener('click', ()=>{
         const pw = (els.adminPasswordLocal.value||'').trim();
         if (!pw) return alert('パスワードを入力してください');
-        if (pw === getPwLocal()) { setAdminMode(true); closeModal(); alert('管理者モードになりました'); }
+        if (pw === getPwLocal()) { setAdminMode(true); els.pwChangeLocal.style.display='block'; closeModal(); alert('管理者モードになりました'); }
         else alert('パスワードが違います');
       });
       els.logoutBtnLocal.addEventListener('click', ()=>{ setAdminMode(false); closeModal(); alert('閲覧モードになりました'); });
-      window.setAdminPassword = (newPw)=> localStorage.setItem('kids110_admin_pw', newPw);
+
+      // ローカルPW変更
+      if (els.changePwBtn){
+        els.changePwBtn.addEventListener('click', ()=>{
+          if (!state.isAdmin) return alert('管理者ログイン中のみ変更できます');
+          const cur = els.curPw.value, n1 = els.newPw1.value, n2 = els.newPw2.value;
+          if (cur !== getPwLocal()) return alert('現在のパスワードが違います');
+          if (!n1 || n1.length < 8) return alert('新しいパスワードは8文字以上にしてください');
+          if (n1 !== n2) return alert('新しいパスワードが一致しません');
+          setPwLocal(n1);
+          els.curPw.value = els.newPw1.value = els.newPw2.value = '';
+          alert('パスワードを変更しました');
+        });
+      }
     }
 
     /************ 初期化 ************/
