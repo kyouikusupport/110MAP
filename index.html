@@ -38,9 +38,7 @@
       position:absolute; right:12px; bottom:12px; z-index:950;
       background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; box-shadow:var(--shadow); font-size:14px;
     }
-    .legend-overlay{
-      position:fixed; inset:0; display:none; z-index:1001;
-    }
+    .legend-overlay{ position:fixed; inset:0; display:none; z-index:1001; }
     .legend-overlay.show{ display:block; }
     .legend-overlay .backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.35); }
     .legend-overlay .panel{
@@ -135,7 +133,7 @@
     const DEFAULT_ZOOM = 13;
 
     // Apps Script の WebアプリURL（〜/exec）
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUVDUuB1Eac9CDzbAghUgJlCVvbhTmI6j_r3f-6R-pdtb1WYhU4mE4ImVJ3nvzHSBd/exec";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/____ここにあなたのexec URL____/exec";
 
     const USE_APPS_SCRIPT = !!APPS_SCRIPT_URL;
 
@@ -187,9 +185,7 @@
       els.statusBadge.style.color = state.isAdmin ? '#127a43' : '#1f4ad7';
       els.statusBadge.style.borderColor = state.isAdmin ? '#c7f0d7' : '#d8e4ff';
       els.adminActions.style.display = state.isAdmin ? 'inline-flex' : 'none';
-      // ドラッグ可否
       for (const mk of state.markers.values()) state.isAdmin ? mk.dragging.enable() : mk.dragging.disable();
-      // 閲覧モードに戻る際は開いているポップアップを閉じる（重複表示防止）
       if (wasAdmin && !state.isAdmin) { map.closePopup(); }
     }
 
@@ -224,21 +220,22 @@
       state.pins.forEach(pin=>{
         const marker = L.marker([pin.lat, pin.lng], { icon: icons[pin.color]||icons.blue, riseOnHover:true, draggable: state.isAdmin });
 
-        // ドラッグ終了（管理者のみ実際にドラッグ可）
         marker.on('dragend', async (ev)=>{
           const ll = ev.target.getLatLng();
           if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { lat:Number(ll.lat), lng:Number(ll.lng) }); await refreshRemotePins(); }
           else { const p=state.pins.find(x=>x.id===pin.id); if(p){ p.lat=Number(ll.lat); p.lng=Number(ll.lng); savePinsLocal(); renderAllPins(); } }
         });
 
-        // 常に「ホバーで名前」ツールチップ（スマホは長押し等で出ない場合あり）
-        marker.bindTooltip(pin.name||'名称未設定', { sticky:true, direction:'top', className:'my-tooltip' });
+        // ★ ツールチップを「ピンの頭上」にずらす（上方向へ36px）
+        marker.bindTooltip(pin.name||'名称未設定', {
+          sticky:true,
+          direction:'top',
+          offset:[0,-36],
+          className:'my-tooltip'
+        });
 
-        // クリック挙動：
-        //  - 閲覧モード：何もしない（ポップアップを出さない）
-        //  - 管理者モード：編集用ポップアップを出す
         marker.on('click', ()=>{
-          if (!state.isAdmin) return; // ★ 閲覧モードではポップアップ無し（重複表示を防止）
+          if (!state.isAdmin) return; // 閲覧モードではポップアップ無し
           const container = document.createElement('div');
           container.className='popup-form';
           const opts = ['shop','public','home'].map(k=>{
@@ -405,7 +402,7 @@
         alert([
           '【モード】Apps Script（全員で同じデータを共有）',
           '・右上のレイヤ切替で地図の種類を変更できます（国土地理院・航空写真など）。',
-          '・閲覧モード：ピンは名前のツールチップのみ表示（ポップアップ無し）',
+          '・閲覧モード：ピンは名前のツールチップのみ表示（ポップアップ無し／頭上表示）',
           '・管理者モード：地図クリックで追加／ピンのポップアップから名称・カテゴリ変更／削除可',
           '・管理者モード中はピンをドラッグで微調整できます',
           '・エクスポート／インポートでJSONを保存・読み込み可能（形式互換）',
@@ -465,4 +462,3 @@
   </script>
 </body>
 </html>
-
