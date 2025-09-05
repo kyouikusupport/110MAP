@@ -32,16 +32,28 @@
     #map{ flex:1 1 auto; height: calc(100vh - 64px); } .leaflet-container{ outline:none; }
     .leaflet-tooltip.my-tooltip{ background:#111; color:#fff; border:none; border-radius:6px; padding:6px 8px; font-size:12px; box-shadow:0 6px 16px rgba(0,0,0,.25); }
     .popup-form{ min-width:240px; } .popup-form .actions{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
-    .legend{ position:absolute; right:12px; bottom:12px; z-index:900; background:var(--panel); border:1px solid #e5e7eb; border-radius:12px;
-      padding:10px 12px; box-shadow:var(--shadow); font-size:13px; }
-    .legend h3{ margin:0 0 8px; font-size:13px; } .legend .item{ display:flex; align-items:center; gap:8px; margin:6px 0; }
-    .dot{ width:14px; height:22px; background:#ccc; border-radius:3px; position:relative; }
+
+    /* 折りたたみ式カテゴリ（凡例） */
+    details.legend{
+      position:absolute; right:12px; bottom:12px; z-index:900;
+      background:var(--panel); border:1px solid #e5e7eb; border-radius:12px;
+      box-shadow:var(--shadow); font-size:13px; max-width:70vw;
+    }
+    details.legend summary{
+      list-style:none; cursor:pointer; padding:8px 12px;
+      font-weight:700; user-select:none; outline:none;
+    }
+    details.legend[open] summary{ border-bottom:1px solid #e5e7eb; border-top-left-radius:12px; border-top-right-radius:12px; }
+    details.legend .content{ padding:8px 12px; }
+    .legend .item{ display:flex; align-items:center; gap:8px; margin:6px 0; }
+    .dot{ width:12px; height:18px; background:#ccc; border-radius:3px; position:relative; }
     .dot:after{ content:""; position:absolute; bottom:-6px; left:50%; transform:translateX(-50%);
       width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-top:8px solid #ccc; }
     .dot.blue{ background:#2e7cff; } .dot.blue:after{ border-top-color:#2e7cff; }
     .dot.green{ background:#2fbf71; } .dot.green:after{ border-top-color:#2fbf71; }
     .dot.red{ background:#e23b3b; } .dot.red:after{ border-top-color:#e23b3b; }
 
+    /* 歯車ボタン & モーダル */
     .gear-btn{ position:fixed; left:14px; bottom:14px; z-index:950; width:44px; height:44px; border-radius:999px;
       border:1px solid #e5e7eb; background:#fff; display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow); }
     .gear-btn svg{ width:22px; height:22px; }
@@ -54,6 +66,13 @@
     .row{ display:flex; gap:8px; align-items:center; margin:8px 0; } .row input{ flex:1; padding:8px 10px; border:1px solid #d7d7e0; border-radius:8px; font-size:14px; }
     .tip{ font-size:12px; color:var(--muted); line-height:1.4; }
     #adminActions{ display:none; align-items:center; gap:8px; }
+
+    /* モバイルでさらにコンパクトに */
+    @media (max-width: 480px){
+      details.legend{ font-size:12px; }
+      details.legend summary{ padding:8px 10px; }
+      details.legend .content{ padding:6px 10px; }
+    }
   </style>
 </head>
 <body>
@@ -74,12 +93,15 @@
 
   <div id="map" tabindex="0" aria-label="子ども110番の家 地図"></div>
 
-  <div class="legend" aria-label="凡例">
-    <h3>凡例</h3>
-    <div class="item"><span class="dot blue"></span>お店（青）</div>
-    <div class="item"><span class="dot green"></span>公共施設（緑）</div>
-    <div class="item"><span class="dot red"></span>個人宅・塾（赤）</div>
-  </div>
+  <!-- 折りたたみ式 カテゴリ（凡例） -->
+  <details class="legend" aria-label="カテゴリ（凡例）">
+    <summary>カテゴリ</summary>
+    <div class="content">
+      <div class="item"><span class="dot blue" aria-hidden="true"></span>お店（青）</div>
+      <div class="item"><span class="dot green" aria-hidden="true"></span>公共施設（緑）</div>
+      <div class="item"><span class="dot red" aria-hidden="true"></span>個人宅・塾（赤）</div>
+    </div>
+  </details>
 
   <!-- 歯車（管理者） -->
   <button id="gearBtn" class="gear-btn" aria-label="管理者設定">
@@ -126,7 +148,6 @@
 
     // Apps Script の WebアプリURL（〜/exec）。未指定ならLocalStorageモード
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUVDUuB1Eac9CDzbAghUgJlCVvbhTmI6j_r3f-6R-pdtb1WYhU4mE4ImVJ3nvzHSBd/exec";
-
     const USE_APPS_SCRIPT = !!APPS_SCRIPT_URL;
 
     const ADMIN_PASSWORD_DEFAULT = "admin110"; // LocalStorageモード用
@@ -183,23 +204,17 @@
       for (const mk of state.markers.values()) state.isAdmin ? mk.dragging.enable() : mk.dragging.disable();
     }
 
-    /************ 地図（複数レイヤ対応） ************/
+    /************ 地図（レイヤ選択あり／GSI標準→代替に割当） ************/
     const map = L.map('map', { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, zoomControl:true, attributionControl:true });
 
     const osmStd = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom:20, minZoom:3, attribution:'&copy; OpenStreetMap contributors'
     });
 
-    // 国土地理院：標準は読み込み不具合があるため「std（代替）」を標準名で割当
-    const gsiStd = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/standard/{z}/{x}/{y}.png', {
+    const gsiStdAlt = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
       maxZoom:18, minZoom:2, attribution:'地理院タイル（標準地図）',
       errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
     });
-    const gsiStdAlt = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
-      maxZoom:18, minZoom:2, attribution:'地理院タイル（標準地図・代替）',
-      errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
-    });
-
     const gsiPale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
       maxZoom:18, minZoom:2, attribution:'地理院タイル（淡色地図）'
     });
@@ -210,7 +225,6 @@
       maxZoom:19, minZoom:2, attribution:'Tiles &copy; Esri'
     });
 
-    // 任意：MapTiler Streets
     const MAPTILER_KEY = "";
     const mapTilerStreets = MAPTILER_KEY
       ? L.tileLayer(`https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`, {
@@ -221,7 +235,7 @@
     // 既定は OSM
     osmStd.addTo(map);
 
-    // UI上の「国土地理院 標準地図」は gsiStdAlt を指す（代替の選択肢は出さない）
+    // 「国土地理院 標準地図」は gsiStdAlt を指す（代替の項目は出さない）
     const baseLayers = {
       "OpenStreetMap（標準）": osmStd,
       "国土地理院 標準地図": gsiStdAlt,
@@ -230,8 +244,7 @@
       "Esri 航空写真": esriWorldImg
     };
     if (mapTilerStreets) baseLayers["MapTiler Streets（POI多め）"] = mapTilerStreets;
-
-    L.control.layers(baseLayers, null, { position: 'topright', collapsed: true }).addTo(map);
+    L.control.layers(baseLayers, null, { position:'topright', collapsed:true }).addTo(map);
 
     function clearAllMarkers(){ for (const m of state.markers.values()) m.remove(); state.markers.clear(); }
     function renderAllPins(){
@@ -239,7 +252,6 @@
       state.pins.forEach(pin=>{
         const marker = L.marker([pin.lat, pin.lng], { icon: icons[pin.color]||icons.blue, riseOnHover:true, draggable: state.isAdmin });
 
-        // ドラッグ終了：位置保存
         marker.on('dragend', async (ev)=>{
           const ll = ev.target.getLatLng();
           if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { lat:Number(ll.lat), lng:Number(ll.lng) }); await refreshRemotePins(); }
@@ -247,18 +259,15 @@
           if (marker.isPopupOpen()) marker.closePopup();
         });
 
-        // ホバー時の名称（ツールチップ）
+        // ホバー表示（名称）
         marker.bindTooltip(pin.name||'名称未設定', { sticky:true, direction:'top', className:'my-tooltip' });
 
-        // クリック/タップ時の挙動
+        // クリック/タップ時
         marker.on('click', ()=>{
           if (!state.isAdmin) {
-            // 閲覧モード：名前だけをポップアップ表示
             marker.bindPopup(`<div style="font-weight:700;">${escapeHtml(pin.name)}</div>`).openPopup();
             return;
           }
-
-          // 管理者モード：従来どおり編集UI（名称変更・カテゴリ変更・削除）
           const container = document.createElement('div');
           container.className='popup-form';
           const opts = ['shop','public','home'].map(k=>{
@@ -305,7 +314,7 @@
     }
     function fitToPins(){ if(!state.pins.length) return; const b=L.latLngBounds(state.pins.map(p=>[p.lat,p.lng])); map.fitBounds(b.pad(0.2)); }
 
-    // 地図クリック（管理者のみ追加）
+    // 地図クリック（管理者のみ：追加）
     map.on('click', (e)=>{
       if (!state.isAdmin) return;
       const form = document.createElement('div');
@@ -365,7 +374,6 @@
       renderAllPins();
       if (state.pins.length && !refreshRemotePins._fitted) { fitToPins(); refreshRemotePins._fitted = true; }
     }
-    // GASへPOST：Headerを付けずプリフライト回避、textで受けてJSON解析
     async function postAS(payload){
       const body = JSON.stringify(Object.assign({}, payload, { adminKey: state.adminKey || '' }));
       const res  = await fetch(APPS_SCRIPT_URL, { method:'POST', mode:'cors', body });
