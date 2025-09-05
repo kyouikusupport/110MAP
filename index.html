@@ -125,7 +125,7 @@
     const DEFAULT_ZOOM = 13;
 
     // Apps Script の WebアプリURL（〜/exec）。未指定ならLocalStorageモード
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUVDUuB1Eac9CDzbAghUgJlCVvbhTmI6j_r3f-6R-pdtb1WYhU4mE4ImVJ3nvzHSBd/exec"; // ← ここに③で控えたURLを入れる
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUVDUuB1Eac9CDzbAghUgJlCVvbhTmI6j_r3f-6R-pdtb1WYhU4mE4ImVJ3nvzHSBd/exec";
 
     const USE_APPS_SCRIPT = !!APPS_SCRIPT_URL;
 
@@ -313,21 +313,21 @@
       renderAllPins();
       if (state.pins.length && !refreshRemotePins._fitted) { fitToPins(); refreshRemotePins._fitted = true; }
     }
-    // （修正後）GASへPOST。Content－Typeヘッダーはつけない＝プリフライト会費
+    // （修正後）GASへPOST。Content-Typeヘッダーは付けない＝プリフライト回避
     async function postAS(payload){
       const body = JSON.stringify(Object.assign({}, payload, { adminKey: state.adminKey || '' }));
       const res  = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        mode: 'cors',        // CORSでOK。プリフライトは発生しない
+        mode: 'cors',
         body
       });
 
-      // GASはたまに text/plain で返すので、まずは text で取り、手動で JSON 解析
+      // GASはたまに text/plain で返すので、まずは text で受けてからJSON化
       const text = await res.text();
       let obj;
       try { obj = JSON.parse(text); }
       catch(e){ throw new Error('サーバ応答が不正です: ' + text.slice(0,200)); }
-    
+
       if (!obj.ok) throw new Error(obj.error || 'POST failed');
       return obj;
     }
@@ -386,7 +386,7 @@
           USE_APPS_SCRIPT ? '【モード】Apps Script（全員で同じデータを共有）' : '【モード】LocalStorage（この端末のみ）',
           '・地図の種類は右上レイヤ切替（OSM）',
           '・管理者：地図クリックで追加／ポップアップから名称・カテゴリ変更／削除',
-          '・管理者：ドラッグで位置微調整',
+          '・管理者：ドラッグで位置を微調整',
           '・JSONのエクスポート／インポート対応（互換）',
           USE_APPS_SCRIPT ? '・ログイン：歯車 → 管理者キーを入力（GASのADMIN_KEY）' : '・ログイン：歯車 → ローカルパスワード（初期: admin110）'
         ].join('\n'));
