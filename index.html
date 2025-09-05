@@ -143,7 +143,7 @@
     const DEFAULT_CENTER = [35.662, 138.488];
     const DEFAULT_ZOOM = 13;
 
-    // Apps Script の WebアプリURL（〜/exec）に差し替えてください
+    // あなたのGAS /exec URL
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUVDUuB1Eac9CDzbAghUgJlCVvbhTmI6j_r3f-6R-pdtb1WYhU4mE4ImVJ3nvzHSBd/exec";
 
     const USE_APPS_SCRIPT = !!APPS_SCRIPT_URL;
@@ -158,6 +158,7 @@
 
     /************ 状態 ************/
     const state = { isAdmin:false, markers:new Map(), pins:[], adminKey:null };
+    let lastClickedMarker = null; // 閲覧モードでクリック表示中のマーカーを追跡
     const els = {
       statusBadge: document.getElementById('status-badge'),
       locateBtn: document.getElementById('locateBtn'),
@@ -203,6 +204,15 @@
       els.changeKeySection.style.display = state.isAdmin ? 'block' : 'none';
       for (const mk of state.markers.values()) state.isAdmin ? mk.dragging.enable() : mk.dragging.disable();
       if (wasAdmin && !state.isAdmin) { map.closePopup(); }
+      // 閲覧モードへの切替時はクリック表示中のツールチップを閉じる
+      if (!state.isAdmin && lastClickedMarker) {
+        lastClickedMarker.closeTooltip();
+        if (lastClickedMarker._hoverTT) {
+          lastClickedMarker.unbindTooltip();
+          lastClickedMarker.bindTooltip(lastClickedMarker._hoverTT);
+        }
+        lastClickedMarker = null;
+      }
     }
 
     /************ 地図（レイヤ切替） ************/
@@ -242,13 +252,60 @@
           else { const p=state.pins.find(x=>x.id===pin.id); if(p){ p.lat=Number(ll.lat); p.lng=Number(ll.lng); savePinsLocal(); renderAllPins(); } }
         });
 
-        // ツールチップ（ピンの頭上にオフセット）
-        marker.bindTooltip(pin.name||'名称未設定', {
-          sticky:true, direction:'top', offset:[0,-36], className:'my-tooltip'
-        });
+        // ツールチップ：ホバー用（カーソルの位置＝offset[0,0], sticky:true）とクリック用（ピン頭上＝offset[0,-36]）を用意
+        const nameText = pin.name || '名称未設定';
+        const hoverTT = L.tooltip({direction:'top', sticky:true, offset:[0,0], className:'my-tooltip'}).setContent(nameText);
+        const clickTT = L.tooltip({direction:'top', sticky:false, offset:[0,-36], className:'my-tooltip'}).setContent(nameText);
+        marker._hoverTT = hoverTT;
+        marker._clickTT = clickTT;
 
+        // 既定はホバー用をバインド
+        marker.bindTooltip(hoverTT);
+
+        // ホバー時：ホバー用に差し戻し＆開く（スマホでは発火しない）
+        marker.on('mouseover', ()=>{
+          if (marker.getTooltip() !== hoverTT) { marker.unbindTooltip(); marker.bindTooltip(hoverTT); }
+          marker.openTooltip();
+        });
+        marker.on('mouseout', ()=>{ marker.closeTooltip(); });
+
+        // クリック時：閲覧モードはクリック用を開き、他所クリックで閉じる／管理者モードは編集ポップアップ
         marker.on('click', ()=>{
-          if (!state.isAdmin) return; // 閲覧モードではポップアップ無し
+          if (!state.isAdmin) {
+            // すでに他のマーカーがクリック表示中なら閉じる
+            if (lastClickedMarker && lastClickedMarker !== marker) {
+              lastClickedMarker.closeTooltip();
+              if (lastClickedMarker._hoverTT) {
+                lastClickedMarker.unbindTooltip();
+                lastClickedMarker.bindTooltip(lastClickedMarker._hoverTT);
+              }
+              lastClickedMarker = null;
+            }
+            // クリック用に差し替えて開く
+            marker.closeTooltip();
+            marker.unbindTooltip();
+            marker.bindTooltip(clickTT).openTooltip();
+            lastClickedMarker = marker;
+
+            // 地図上の他所を1回クリックしたら閉じてホバーに戻す
+            setTimeout(()=>{
+              const closeOnce = ()=>{
+                if (lastClickedMarker) {
+                  lastClickedMarker.closeTooltip();
+                  if (lastClickedMarker._hoverTT) {
+                    lastClickedMarker.unbindTooltip();
+                    lastClickedMarker.bindTooltip(lastClickedMarker._hoverTT);
+                  }
+                  lastClickedMarker = null;
+                }
+                map.off('click', closeOnce);
+              };
+              map.once('click', closeOnce);
+            }, 0);
+            return;
+          }
+
+          // --- 管理者モード：編集ポップアップ ---
           const container = document.createElement('div');
           container.className='popup-form';
           const opts = ['shop','public','home'].map(k=>{
@@ -257,7 +314,7 @@
             return `<option value="${k}" ${sel}>${label}</option>`;
           }).join('');
           container.innerHTML = `
-            <div style="font-weight:700; margin-bottom:6px;">${escapeHtml(pin.name)}</div>
+            <div style="font-weight:700; margin-bottom:6px;">${escapeHtml(nameText)}</div>
             <div class="actions" style="margin-top:8px;">
               <button class="btn" id="renameBtn">名称変更</button>
               <label class="label" for="catSel" style="margin-left:0;">カテゴリ</label>
@@ -270,12 +327,12 @@
           marker.bindPopup(container).openPopup();
 
           container.querySelector('#delBtn').addEventListener('click', async ()=>{
-            if (!confirm(`「${pin.name}」のピンを削除します。よろしいですか？`)) return;
+            if (!confirm(`「${nameText}」のピンを削除します。よろしいですか？`)) return;
             if (USE_APPS_SCRIPT) { await deletePinRemote(pin.id); await refreshRemotePins(); }
             else { deletePinLocal(pin.id); }
           });
           container.querySelector('#renameBtn').addEventListener('click', async ()=>{
-            const newName = prompt('新しい名称を入力してください', pin.name);
+            const newName = prompt('新しい名称を入力してください', nameText);
             if (!newName || !newName.trim()) return;
             if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { name:newName.trim() }); await refreshRemotePins(); }
             else { renamePinLocal(pin.id, newName.trim()); }
@@ -415,7 +472,7 @@
         alert([
           '【モード】Apps Script（全員で同じデータを共有）',
           '・右上のレイヤ切替で地図の種類を変更できます（国土地理院・航空写真など）。',
-          '・閲覧モード：ピンは名前のツールチップのみ（頭上表示）',
+          '・閲覧モード：ホバーで名前（カーソル位置）、クリックで名前（ピン頭上・他所クリックで閉）',
           '・管理者モード：地図クリックで追加／ピンのポップアップから名称・カテゴリ変更／削除可',
           '・管理者モード中はピンをドラッグで微調整できます',
           '・エクスポート／インポートでJSONを保存・読み込み可能（形式互換）',
@@ -442,7 +499,6 @@
     els.modalBackdrop.addEventListener('click', closeModal);
     window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
 
-    // ログイン/ログアウト
     document.getElementById('loginBtnAS').addEventListener('click', ()=>{
       const key = (els.adminKey.value||'').trim();
       if (!key) return alert('管理者キーを入力してください');
@@ -452,7 +508,6 @@
       state.adminKey = null; setAdminMode(false); closeModal(); alert('閲覧モードになりました');
     });
 
-    // 管理者キー変更
     els.changeKeyBtn.addEventListener('click', async ()=>{
       if (!state.isAdmin) return alert('管理者モードでのみ変更できます');
       const n1 = (els.newKey1.value||'').trim();
@@ -462,7 +517,7 @@
       if (!confirm('管理者キーを変更します。続行しますか？')) return;
       try{
         await postAS({ op:'changeKey', newKey: n1 });
-        state.adminKey = n1; // 以降の操作で新キーを使用
+        state.adminKey = n1;
         els.newKey1.value = els.newKey2.value = '';
         alert('管理者キーを変更しました');
       }catch(e){
@@ -484,4 +539,3 @@
   </script>
 </body>
 </html>
-
