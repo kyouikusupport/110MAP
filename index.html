@@ -31,21 +31,26 @@
       background:#eef4ff; color:#1f4ad7; border:1px solid #d8e4ff; font-weight:600; }
     #map{ flex:1 1 auto; height: calc(100vh - 64px); } .leaflet-container{ outline:none; }
     .leaflet-tooltip.my-tooltip{ background:#111; color:#fff; border:none; border-radius:6px; padding:6px 8px; font-size:12px; box-shadow:0 6px 16px rgba(0,0,0,.25); }
+    .popup-form{ min-width:240px; } .popup-form .actions{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
 
-    /* 折りたたみ式カテゴリ（凡例） */
-    details.legend{
-      position:absolute; right:12px; bottom:12px; z-index:900;
-      background:var(--panel); border:1px solid #e5e7eb; border-radius:12px;
-      box-shadow:var(--shadow); font-size:13px; max-width:70vw;
+    /* カテゴリ（凡例）ボタンとパネル */
+    .legend-btn{
+      position:absolute; right:12px; bottom:12px; z-index:950;
+      background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; box-shadow:var(--shadow); font-size:14px;
     }
-    details.legend summary{
-      list-style:none; cursor:pointer; padding:8px 12px;
-      font-weight:700; user-select:none; outline:none;
+    .legend-overlay{
+      position:fixed; inset:0; display:none; z-index:1001;
     }
-    details.legend[open] summary{ border-bottom:1px solid #e5e7eb; border-top-left-radius:12px; border-top-right-radius:12px; }
-    details.legend .content{ padding:8px 12px; }
-    .legend .item{ display:flex; align-items:center; gap:8px; margin:6px 0; }
-    .dot{ width:12px; height:18px; background:#ccc; border-radius:3px; position:relative; }
+    .legend-overlay.show{ display:block; }
+    .legend-overlay .backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.35); }
+    .legend-overlay .panel{
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:var(--shadow);
+      padding:12px 14px; width:min(92vw, 360px);
+    }
+    .legend-overlay h3{ margin:0 0 8px; font-size:15px; }
+    .legend-overlay .item{ display:flex; align-items:center; gap:8px; margin:6px 0; font-size:14px; }
+    .dot{ width:14px; height:22px; background:#ccc; border-radius:3px; position:relative; }
     .dot:after{ content:""; position:absolute; bottom:-6px; left:50%; transform:translateX(-50%);
       width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-top:8px solid #ccc; }
     .dot.blue{ background:#2e7cff; } .dot.blue:after{ border-top-color:#2e7cff; }
@@ -65,13 +70,6 @@
     .row{ display:flex; gap:8px; align-items:center; margin:8px 0; } .row input{ flex:1; padding:8px 10px; border:1px solid #d7d7e0; border-radius:8px; font-size:14px; }
     .tip{ font-size:12px; color:var(--muted); line-height:1.4; }
     #adminActions{ display:none; align-items:center; gap:8px; }
-
-    /* モバイルでさらにコンパクトに */
-    @media (max-width: 480px){
-      details.legend{ font-size:12px; }
-      details.legend summary{ padding:8px 10px; }
-      details.legend .content{ padding:6px 10px; }
-    }
   </style>
 </head>
 <body>
@@ -92,15 +90,17 @@
 
   <div id="map" tabindex="0" aria-label="子ども110番の家 地図"></div>
 
-  <!-- 折りたたみ式 カテゴリ（凡例） -->
-  <details id="legendToggle" class="legend" aria-label="カテゴリ（凡例）">
-    <summary>カテゴリ</summary>
-    <div class="content">
+  <!-- カテゴリ（凡例） -->
+  <button id="legendBtn" class="legend-btn" aria-label="カテゴリの説明を表示">カテゴリ</button>
+  <div id="legendOverlay" class="legend-overlay" aria-hidden="true">
+    <div class="backdrop" id="legendBackdrop"></div>
+    <div class="panel" role="dialog" aria-modal="true" aria-labelledby="legendTitle">
+      <h3 id="legendTitle">カテゴリ</h3>
       <div class="item"><span class="dot blue" aria-hidden="true"></span>お店（青）</div>
       <div class="item"><span class="dot green" aria-hidden="true"></span>公共施設（緑）</div>
       <div class="item"><span class="dot red" aria-hidden="true"></span>個人宅・塾（赤）</div>
     </div>
-  </details>
+  </div>
 
   <!-- 歯車（管理者） -->
   <button id="gearBtn" class="gear-btn" aria-label="管理者設定">
@@ -117,45 +117,15 @@
       </div>
 
       <!-- Apps Script ログイン -->
-      <div id="loginAppsScript" style="display:none">
+      <div id="loginAppsScript">
         <div class="tip">モード: Apps Script（全員共有／管理者キーで編集）</div>
         <div class="row"><input id="adminKey" type="password" placeholder="管理者キー（GAS側のADMIN_KEY）"></div>
         <div class="row">
           <button id="loginBtnAS" class="primary">ログイン</button>
           <button id="logoutBtnAS" class="danger">ログアウト</button>
         </div>
-
-        <!-- ▼ 管理者キー変更（ログイン中のみ表示） -->
-        <div id="changeKeyAS" style="display:none; border-top:1px solid #e5e7eb; margin-top:8px; padding-top:8px;">
-          <div class="tip" style="margin-bottom:6px;">管理者キー（パスワード）変更</div>
-          <div class="row"><input id="newKey1" type="password" placeholder="新しい管理者キー（8文字以上推奨）"></div>
-          <div class="row"><input id="newKey2" type="password" placeholder="新しい管理者キー（確認）"></div>
-          <div class="row"><button id="changeKeyBtnAS" class="primary">変更する</button></div>
-          <div class="tip">※ 現在のキーでログイン済みのときのみ変更できます。変更後は新しいキーで再ログインしてください。</div>
-        </div>
-
-        <div class="tip">※ 管理者キーはサーバ側（Apps Script）に保存されます。クライアントには保存しません。</div>
+        <div class="tip">※ 管理者キーはサーバ側（Apps Script）に設定します。クライアントには保存されません。</div>
       </div>
-
-      <!-- LocalStorage ログイン（フォールバック） -->
-      <div id="loginLocal" style="display:none">
-        <div class="tip">モード: ローカル（この端末のみ保存・共有なし）</div>
-        <div class="row"><input id="adminPasswordLocal" type="password" placeholder="パスワード（初期: admin110）"></div>
-        <div class="row">
-          <button id="loginBtnLocal" class="primary">ログイン</button>
-          <button id="logoutBtnLocal" class="danger">ログアウト</button>
-        </div>
-        <!-- ▼ ローカル用パスワード変更（ログイン中のみ） -->
-        <div id="pwChangeLocal" style="display:none; border-top:1px solid #e5e7eb; margin-top:8px; padding-top:8px;">
-          <div class="tip" style="margin-bottom:6px;">ローカルパスワード変更</div>
-          <div class="row"><input id="curPw"  type="password" placeholder="現在のパスワード"></div>
-          <div class="row"><input id="newPw1" type="password" placeholder="新しいパスワード（8文字以上推奨）"></div>
-          <div class="row"><input id="newPw2" type="password" placeholder="新しいパスワード（確認）"></div>
-          <div class="row"><button id="changePwBtn" class="primary">変更する</button></div>
-          <div class="tip">※ ローカルパスワードはこの端末のブラウザに保存されます。</div>
-        </div>
-      </div>
-
     </div>
   </div>
 
@@ -164,11 +134,11 @@
     const DEFAULT_CENTER = [35.662, 138.488];
     const DEFAULT_ZOOM = 13;
 
-    // Apps Script の WebアプリURL（〜/exec）。未指定ならLocalStorageモード
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUVDUuB1Eac9CDzbAghUgJlCVvbhTmI6j_r3f-6R-pdtb1WYhU4mE4ImVJ3nvzHSBd/exec";
+    // Apps Script の WebアプリURL（〜/exec）
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/____ここにあなたのexec URL____/exec";
+
     const USE_APPS_SCRIPT = !!APPS_SCRIPT_URL;
 
-    const ADMIN_PASSWORD_DEFAULT = "admin110"; // LocalStorageモード用
     const CATEGORIES = { shop:{label:'お店',color:'blue'}, public:{label:'公共施設',color:'green'}, home:{label:'個人宅・塾',color:'red'} };
     const icons = {
       red: new L.Icon({ iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',    shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png', iconSize:[25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41] }),
@@ -191,26 +161,11 @@
       adminModal: document.getElementById('adminModal'),
       modalBackdrop: document.getElementById('modalBackdrop'),
       modalClose: document.getElementById('modalClose'),
-      loginAS: document.getElementById('loginAppsScript'),
       adminKey: document.getElementById('adminKey'),
-      loginBtnAS: document.getElementById('loginBtnAS'),
-      logoutBtnAS: document.getElementById('logoutBtnAS'),
-      changeKeyAS: document.getElementById('changeKeyAS'),
-      newKey1: document.getElementById('newKey1'),
-      newKey2: document.getElementById('newKey2'),
-      changeKeyBtnAS: document.getElementById('changeKeyBtnAS'),
 
-      loginLocal: document.getElementById('loginLocal'),
-      adminPasswordLocal: document.getElementById('adminPasswordLocal'),
-      loginBtnLocal: document.getElementById('loginBtnLocal'),
-      logoutBtnLocal: document.getElementById('logoutBtnLocal'),
-      pwChangeLocal: document.getElementById('pwChangeLocal'),
-      curPw: document.getElementById('curPw'),
-      newPw1: document.getElementById('newPw1'),
-      newPw2: document.getElementById('newPw2'),
-      changePwBtn: document.getElementById('changePwBtn'),
-
-      legendToggle: document.getElementById('legendToggle'),
+      legendBtn: document.getElementById('legendBtn'),
+      legendOverlay: document.getElementById('legendOverlay'),
+      legendBackdrop: document.getElementById('legendBackdrop'),
     };
 
     function uid(){ return 'm' + Math.random().toString(36).slice(2,8) + Date.now().toString(36); }
@@ -225,79 +180,65 @@
     }
 
     function setAdminMode(on){
+      const wasAdmin = state.isAdmin;
       state.isAdmin = !!on;
       els.statusBadge.textContent = state.isAdmin ? '管理者モード' : '閲覧モード';
       els.statusBadge.style.background = state.isAdmin ? '#e7f8ef' : '#eef4ff';
       els.statusBadge.style.color = state.isAdmin ? '#127a43' : '#1f4ad7';
       els.statusBadge.style.borderColor = state.isAdmin ? '#c7f0d7' : '#d8e4ff';
       els.adminActions.style.display = state.isAdmin ? 'inline-flex' : 'none';
+      // ドラッグ可否
       for (const mk of state.markers.values()) state.isAdmin ? mk.dragging.enable() : mk.dragging.disable();
+      // 閲覧モードに戻る際は開いているポップアップを閉じる（重複表示防止）
+      if (wasAdmin && !state.isAdmin) { map.closePopup(); }
     }
 
-    /************ 地図（レイヤ選択あり／GSI標準→代替に割当） ************/
+    /************ 地図（レイヤ切替） ************/
     const map = L.map('map', { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, zoomControl:true, attributionControl:true });
 
-    const osmStd = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom:20, minZoom:3, attribution:'&copy; OpenStreetMap contributors'
-    });
-
-    const gsiStdAlt = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
-      maxZoom:18, minZoom:2, attribution:'地理院タイル（標準地図）',
+    const osmStd = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:20, minZoom:3, attribution:'&copy; OpenStreetMap contributors' });
+    // 国土地理院 標準地図 ⇒ std（代替タイル）を「標準地図」として使用
+    const gsiStandard = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+      maxZoom: 18, minZoom: 2, attribution: '地理院タイル（標準地図）',
       errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
     });
-    const gsiPale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
-      maxZoom:18, minZoom:2, attribution:'地理院タイル（淡色地図）'
-    });
-    const gsiPhoto = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
-      maxZoom:18, minZoom:2, attribution:'地理院タイル（写真）'
-    });
-    const esriWorldImg = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom:19, minZoom:2, attribution:'Tiles &copy; Esri'
-    });
+    const gsiPale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', { maxZoom:18, minZoom:2, attribution:'地理院タイル（淡色地図）' });
+    const gsiPhoto = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', { maxZoom:18, minZoom:2, attribution:'地理院タイル（写真）' });
+    const esriWorldImg = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:19, minZoom:2, attribution:'Tiles &copy; Esri' });
 
-    const MAPTILER_KEY = "";
-    const mapTilerStreets = MAPTILER_KEY
-      ? L.tileLayer(`https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`, {
-          maxZoom:20, minZoom:2, attribution:'&copy; MapTiler &copy; OpenStreetMap contributors'
-        })
-      : null;
-
-    // 既定は OSM
     osmStd.addTo(map);
-
-    // 「国土地理院 標準地図」は gsiStdAlt を指す（代替の項目は出さない）
     const baseLayers = {
       "OpenStreetMap（標準）": osmStd,
-      "国土地理院 標準地図": gsiStdAlt,
+      "国土地理院 標準地図": gsiStandard,
       "国土地理院 淡色地図": gsiPale,
       "国土地理院 航空写真": gsiPhoto,
       "Esri 航空写真": esriWorldImg
     };
-    if (mapTilerStreets) baseLayers["MapTiler Streets（POI多め）"] = mapTilerStreets;
     L.control.layers(baseLayers, null, { position:'topright', collapsed:true }).addTo(map);
 
+    /************ マーカー描画 ************/
     function clearAllMarkers(){ for (const m of state.markers.values()) m.remove(); state.markers.clear(); }
+
     function renderAllPins(){
       clearAllMarkers();
       state.pins.forEach(pin=>{
         const marker = L.marker([pin.lat, pin.lng], { icon: icons[pin.color]||icons.blue, riseOnHover:true, draggable: state.isAdmin });
 
+        // ドラッグ終了（管理者のみ実際にドラッグ可）
         marker.on('dragend', async (ev)=>{
           const ll = ev.target.getLatLng();
           if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { lat:Number(ll.lat), lng:Number(ll.lng) }); await refreshRemotePins(); }
-          else { const p=state.pins.find(x=>x.id===pin.id); if(p){ p.lat=Number(ll.lat); p.lng=Number(ll.lng); savePinsLocal(); } }
-          if (marker.isPopupOpen()) marker.closePopup();
+          else { const p=state.pins.find(x=>x.id===pin.id); if(p){ p.lat=Number(ll.lat); p.lng=Number(ll.lng); savePinsLocal(); renderAllPins(); } }
         });
 
-        // ホバー表示（名称のみ）
+        // 常に「ホバーで名前」ツールチップ（スマホは長押し等で出ない場合あり）
         marker.bindTooltip(pin.name||'名称未設定', { sticky:true, direction:'top', className:'my-tooltip' });
 
-        // クリック/タップ：閲覧モードは名前だけ、管理者は編集UI
+        // クリック挙動：
+        //  - 閲覧モード：何もしない（ポップアップを出さない）
+        //  - 管理者モード：編集用ポップアップを出す
         marker.on('click', ()=>{
-          if (!state.isAdmin) {
-            marker.bindPopup(`<div style="font-weight:700;">${escapeHtml(pin.name)}</div>`).openPopup();
-            return;
-          }
+          if (!state.isAdmin) return; // ★ 閲覧モードではポップアップ無し（重複表示を防止）
           const container = document.createElement('div');
           container.className='popup-form';
           const opts = ['shop','public','home'].map(k=>{
@@ -342,9 +283,10 @@
         state.markers.set(pin.id, marker);
       });
     }
+
     function fitToPins(){ if(!state.pins.length) return; const b=L.latLngBounds(state.pins.map(p=>[p.lat,p.lng])); map.fitBounds(b.pad(0.2)); }
 
-    // 地図クリック（管理者のみ：追加）
+    // 地図クリック→追加（管理者のみ）
     map.on('click', (e)=>{
       if (!state.isAdmin) return;
       const form = document.createElement('div');
@@ -359,7 +301,7 @@
         <input id="placeNameInput" type="text" placeholder="例：山田さん宅 / ローソン / 市役所" />
         <label class="label" style="margin-top:6px;">カテゴリ</label>
         <select id="categorySelect">${options}</select>
-        <div class="actions">
+        <div class="actions" style="margin-top:8px;">
           <button class="primary" id="savePin">保存</button>
           <button class="btn" id="cancelPin">キャンセル</button>
         </div>`;
@@ -449,12 +391,8 @@
           const obj = JSON.parse(reader.result);
           if (!obj || !Array.isArray(obj.pins)) throw new Error('不正なファイル形式です');
           const pins = obj.pins.map(normalizePin);
-          if (USE_APPS_SCRIPT) {
-            await postAS({ op:'import', pins });
-            await refreshRemotePins();
-          } else {
-            state.pins = pins; savePinsLocal(); renderAllPins(); fitToPins();
-          }
+          if (USE_APPS_SCRIPT) { await postAS({ op:'import', pins }); await refreshRemotePins(); }
+          else { state.pins = pins; savePinsLocal(); renderAllPins(); fitToPins(); }
           alert('インポートしました');
         }catch(err){ alert('インポート失敗：' + err.message); }
         finally{ e.target.value=''; }
@@ -465,12 +403,13 @@
     if (document.getElementById('helpBtn')) {
       document.getElementById('helpBtn').addEventListener('click', ()=>{
         alert([
-          USE_APPS_SCRIPT ? '【モード】Apps Script（全員で同じデータを共有）' : '【モード】LocalStorage（この端末のみ）',
+          '【モード】Apps Script（全員で同じデータを共有）',
           '・右上のレイヤ切替で地図の種類を変更できます（国土地理院・航空写真など）。',
-          '・管理者：地図クリックで追加／ポップアップから名称・カテゴリ変更／削除',
-          '・管理者：ドラッグで位置を微調整',
-          '・JSONのエクスポート／インポート対応（互換）',
-          USE_APPS_SCRIPT ? '・ログイン：歯車 → 管理者キーを入力（GASのADMIN_KEY）' : '・ログイン：歯車 → ローカルパスワード（初期: admin110）'
+          '・閲覧モード：ピンは名前のツールチップのみ表示（ポップアップ無し）',
+          '・管理者モード：地図クリックで追加／ピンのポップアップから名称・カテゴリ変更／削除可',
+          '・管理者モード中はピンをドラッグで微調整できます',
+          '・エクスポート／インポートでJSONを保存・読み込み可能（形式互換）',
+          '・ログイン：左下の歯車 → 管理者キーを入力（GASのADMIN_KEY）'
         ].join('\n'));
       });
     }
@@ -479,16 +418,7 @@
     function openModal(){
       els.adminModal.classList.add('show');
       els.adminModal.setAttribute('aria-hidden','false');
-      if (USE_APPS_SCRIPT) {
-        els.loginAS.style.display='block'; els.loginLocal.style.display='none';
-        els.adminKey.value='';
-        // ログイン中ならキー変更欄を表示
-        els.changeKeyAS.style.display = state.isAdmin ? 'block' : 'none';
-      } else {
-        els.loginAS.style.display='none'; els.loginLocal.style.display='block';
-        els.adminPasswordLocal.value='';
-        els.pwChangeLocal.style.display = state.isAdmin ? 'block' : 'none';
-      }
+      els.adminKey.value = '';
     }
     function closeModal(){
       els.adminModal.classList.remove('show');
@@ -496,68 +426,30 @@
     }
     els.gearBtn.addEventListener('click', openModal);
     els.modalClose.addEventListener('click', closeModal);
-    els.modalBackdrop.addEventListener('click', closeModal);
+    document.getElementById('modalBackdrop').addEventListener('click', closeModal);
     window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
 
-    // Apps Script ログイン/ログアウト
-    if (USE_APPS_SCRIPT) {
-      els.loginBtnAS.addEventListener('click', ()=>{
-        const key = (els.adminKey.value||'').trim();
-        if (!key) return alert('管理者キーを入力してください');
-        state.adminKey = key; setAdminMode(true);
-        // ログイン直後に変更欄を表示
-        els.changeKeyAS.style.display = 'block';
-        closeModal(); alert('管理者モードになりました');
-      });
-      els.logoutBtnAS.addEventListener('click', ()=>{
-        state.adminKey = null; setAdminMode(false);
-        closeModal(); alert('閲覧モードになりました');
-      });
+    // Apps Script ログイン
+    document.getElementById('loginBtnAS').addEventListener('click', ()=>{
+      const key = (els.adminKey.value||'').trim();
+      if (!key) return alert('管理者キーを入力してください');
+      state.adminKey = key; setAdminMode(true); closeModal(); alert('管理者モードになりました');
+    });
+    document.getElementById('logoutBtnAS').addEventListener('click', ()=>{
+      state.adminKey = null; setAdminMode(false); closeModal(); alert('閲覧モードになりました');
+    });
 
-      // ▼ 管理者キー変更
-      els.changeKeyBtnAS.addEventListener('click', async ()=>{
-        if (!state.isAdmin) return alert('管理者ログイン中のみ変更できます');
-        const n1 = (els.newKey1.value||'').trim();
-        const n2 = (els.newKey2.value||'').trim();
-        if (!n1 || n1.length < 8) return alert('新しい管理者キーは8文字以上にしてください');
-        if (n1 !== n2) return alert('新しい管理者キーが一致しません');
-        try{
-          await postAS({ op:'changeKey', newKey: n1 });
-          state.adminKey = n1; // クライアント側も更新
-          els.newKey1.value = els.newKey2.value = '';
-          alert('管理者キーを変更しました。以後は新しいキーをご利用ください。');
-        }catch(e){
-          console.error(e);
-          alert('キー変更に失敗しました：' + (e.message || e));
-        }
-      });
-    } else {
-      // LocalStorage ログイン
-      const getPwLocal = ()=> localStorage.getItem('kids110_admin_pw') || ADMIN_PASSWORD_DEFAULT;
-      const setPwLocal = (v)=> localStorage.setItem('kids110_admin_pw', v);
-
-      els.loginBtnLocal.addEventListener('click', ()=>{
-        const pw = (els.adminPasswordLocal.value||'').trim();
-        if (!pw) return alert('パスワードを入力してください');
-        if (pw === getPwLocal()) { setAdminMode(true); els.pwChangeLocal.style.display='block'; closeModal(); alert('管理者モードになりました'); }
-        else alert('パスワードが違います');
-      });
-      els.logoutBtnLocal.addEventListener('click', ()=>{ setAdminMode(false); closeModal(); alert('閲覧モードになりました'); });
-
-      // ローカルPW変更
-      if (els.changePwBtn){
-        els.changePwBtn.addEventListener('click', ()=>{
-          if (!state.isAdmin) return alert('管理者ログイン中のみ変更できます');
-          const cur = els.curPw.value, n1 = els.newPw1.value, n2 = els.newPw2.value;
-          if (cur !== getPwLocal()) return alert('現在のパスワードが違います');
-          if (!n1 || n1.length < 8) return alert('新しいパスワードは8文字以上にしてください');
-          if (n1 !== n2) return alert('新しいパスワードが一致しません');
-          setPwLocal(n1);
-          els.curPw.value = els.newPw1.value = els.newPw2.value = '';
-          alert('パスワードを変更しました');
-        });
-      }
-    }
+    /************ カテゴリ（凡例）開閉 ************/
+    function openLegend(){ els.legendOverlay.classList.add('show'); els.legendOverlay.setAttribute('aria-hidden','false'); }
+    function closeLegend(){ els.legendOverlay.classList.remove('show'); els.legendOverlay.setAttribute('aria-hidden','true'); }
+    els.legendBtn.addEventListener('click', openLegend);
+    els.legendBackdrop.addEventListener('click', closeLegend);
+    document.addEventListener('click', (e)=>{
+      const panel = els.legendOverlay.querySelector('.panel');
+      if (!els.legendOverlay.classList.contains('show')) return;
+      if (!panel.contains(e.target) && e.target !== els.legendBtn) closeLegend();
+    });
+    window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeLegend(); });
 
     /************ 初期化 ************/
     (async function init(){
@@ -565,21 +457,11 @@
         try { await refreshRemotePins(); } catch(e){ console.error(e); alert('サーバからデータを取得できませんでした'); }
         setAdminMode(false);
       } else {
-        loadPinsLocal(); renderAllPins(); setAdminMode(sessionStorage.getItem('kids110_admin')==='1'); if (state.pins.length) fitToPins();
+        loadPinsLocal(); renderAllPins(); setAdminMode(false); if (state.pins.length) fitToPins();
       }
     })();
 
-    // ユーティリティ
     function escapeHtml(s){ return String(s).replace(/[&<>"'`=\/]/g, c=>({'&':'&amp;','<':'&lt;','>':'&#62;','"':'&quot;',"'":'&#39;','/':'&#x2F;','`':'&#x60','=':'&#x3D;'}[c])); }
-
-    // ▼ カテゴリパネル：外側クリックで自動クローズ
-    document.addEventListener('pointerdown', (e)=>{
-      const legend = els.legendToggle;
-      if (!legend) return;
-      if (legend.open && !legend.contains(e.target)) {
-        legend.open = false;
-      }
-    });
   </script>
 </body>
 </html>
