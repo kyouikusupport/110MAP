@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>子ども110番の家 マップ</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <style>
+    :root{
+      --brand:#0a7cff; --bg:#f6f7fb; --panel:#ffffff; --text:#222; --muted:#666;
+      --danger:#de3b3b; --ok:#16a34a; --shadow:0 6px 18px rgba(0,0,0,.08);
+    }
+    *{ box-sizing:border-box; } html,body{ height:100%; margin:0; }
+    body{ font-family:"Inter","Noto Sans JP",system-ui,-apple-system,Segoe UI,Roboto,"Hiragino Kaku Gothic ProN","メイリオ",sans-serif;
+      background:var(--bg); color:var(--text); display:flex; flex-direction:column; }
+    header{ display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--panel);
+      border-bottom:1px solid #e7e7ee; position:sticky; top:0; z-index:1000; }
+    header h1{ font-size:18px; margin:0; font-weight:700; } .spacer{ flex:1; }
+    .toolbar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    button,.btn{ appearance:none; border:1px solid #d7d7e0; background:#fff; color:#111; padding:8px 12px; font-size:14px;
+      border-radius:10px; cursor:pointer; transition:.15s ease; }
+    button:hover{ transform:translateY(-1px); box-shadow:0 2px 8px rgba(0,0,0,.06); }
+    .primary{ background:var(--brand); color:#fff; border-color:transparent; }
+    .danger{ background:var(--danger); color:#fff; border-color:transparent; }
+    .success{ background:var(--ok); color:#fff; border-color:transparent; }
+    .badge{ display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 8px; border-radius:999px;
+      background:#eef4ff; color:#1f4ad7; border:1px solid #d8e4ff; font-weight:600; }
+    #map{ flex:1 1 auto; height: calc(100vh - 64px); } .leaflet-container{ outline:none; }
+    .leaflet-tooltip.my-tooltip{ background:#111; color:#fff; border:none; border-radius:6px; padding:6px 8px; font-size:12px; box-shadow:0 6px 16px rgba(0,0,0,.25); }
+    .popup-form{ min-width:240px; } .popup-form .actions{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+    .legend{ position:absolute; right:12px; bottom:12px; z-index:900; background:var(--panel); border:1px solid #e5e7eb; border-radius:12px;
+      padding:10px 12px; box-shadow:var(--shadow); font-size:13px; }
+    .legend h3{ margin:0 0 8px; font-size:13px; } .legend .item{ display:flex; align-items:center; gap:8px; margin:6px 0; }
+    .dot{ width:14px; height:22px; background:#ccc; border-radius:3px; position:relative; }
+    .dot:after{ content:""; position:absolute; bottom:-6px; left:50%; transform:translateX(-50%);
+      width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-top:8px solid #ccc; }
+    .dot.blue{ background:#2e7cff; } .dot.blue:after{ border-top-color:#2e7cff; }
+    .dot.green{ background:#2fbf71; } .dot.green:after{ border-top-color:#2fbf71; }
+    .dot.red{ background:#e23b3b; } .dot.red:after{ border-top-color:#e23b3b; }
+
+    .gear-btn{ position:fixed; left:14px; bottom:14px; z-index:950; width:44px; height:44px; border-radius:999px;
+      border:1px solid #e5e7eb; background:#fff; display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow); }
+    .gear-btn svg{ width:22px; height:22px; }
+    .modal{ position:fixed; inset:0; z-index:1001; display:none; }
+    .modal.show{ display:block; } .modal .backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.35); }
+    .modal .dialog{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:min(92vw, 460px); background:#fff;
+      border:1px solid #e5e7eb; border-radius:12px; box-shadow:var(--shadow); padding:14px; }
+    .modal .titlebar{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+    .modal h2{ font-size:16px; margin:0; } .icon-btn{ width:34px; height:34px; border-radius:8px; border:1px solid #e5e7eb; background:#fff; cursor:pointer; }
+    .row{ display:flex; gap:8px; align-items:center; margin:8px 0; } .row input{ flex:1; padding:8px 10px; border:1px solid #d7d7e0; border-radius:8px; font-size:14px; }
+    .tip{ font-size:12px; color:var(--muted); line-height:1.4; }
+    #adminActions{ display:none; align-items:center; gap:8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>子ども110番の家 マップ</h1>
+    <span id="status-badge" class="badge">閲覧モード</span>
+    <div class="spacer"></div>
+    <div class="toolbar">
+      <button id="locateBtn">現在地へ</button>
+      <button id="fitBtn">全体表示</button>
+      <div id="adminActions">
+        <button id="exportBtn" class="success">エクスポート</button>
+        <label class="btn" for="importFile">インポート<input id="importFile" type="file" accept="application/json" style="display:none"></label>
+        <button id="helpBtn">使い方</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="map" tabindex="0" aria-label="子ども110番の家 地図"></div>
+
+  <div class="legend" aria-label="凡例">
+    <h3>凡例</h3>
+    <div class="item"><span class="dot blue"></span>お店（青）</div>
+    <div class="item"><span class="dot green"></span>公共施設（緑）</div>
+    <div class="item"><span class="dot red"></span>個人宅・塾（赤）</div>
+  </div>
+
+  <!-- 歯車（管理者） -->
+  <button id="gearBtn" class="gear-btn" aria-label="管理者設定">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 1 1 7.04 3.4l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06A2 2 0 1 1 20.6 7.04l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.39 1.26 1 1.51.2.09.41.14.64.14H22a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+  </button>
+
+  <!-- 管理者モーダル（Apps Script / LocalStorage） -->
+  <div id="adminModal" class="modal" aria-hidden="true">
+    <div class="backdrop" id="modalBackdrop"></div>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="adminModalTitle">
+      <div class="titlebar">
+        <h2 id="adminModalTitle">管理者設定</h2>
+        <button id="modalClose" class="icon-btn" aria-label="閉じる">×</button>
+      </div>
+
+      <!-- Apps Script ログイン -->
+      <div id="loginAppsScript" style="display:none">
+        <div class="tip">モード: Apps Script（全員共有／管理者キーで編集）</div>
+        <div class="row"><input id="adminKey" type="password" placeholder="管理者キー（GAS側のADMIN_KEY）"></div>
+        <div class="row">
+          <button id="loginBtnAS" class="primary">ログイン</button>
+          <button id="logoutBtnAS" class="danger">ログアウト</button>
+        </div>
+        <div class="tip">※ 管理者キーはサーバ側（Apps Script）に設定します。クライアントには保存されません。</div>
+      </div>
+
+      <!-- LocalStorage ログイン（フォールバック） -->
+      <div id="loginLocal" style="display:none">
+        <div class="tip">モード: ローカル（この端末のみ保存・共有なし）</div>
+        <div class="row"><input id="adminPasswordLocal" type="password" placeholder="パスワード（初期: admin110）"></div>
+        <div class="row">
+          <button id="loginBtnLocal" class="primary">ログイン</button>
+          <button id="logoutBtnLocal" class="danger">ログアウト</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    /************ 設定 ************/
+    const DEFAULT_CENTER = [35.662, 138.488];
+    const DEFAULT_ZOOM = 13;
+
+    // Apps Script の WebアプリURL（〜/exec）。未指定ならLocalStorageモード
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUVDUuB1Eac9CDzbAghUgJlCVvbhTmI6j_r3f-6R-pdtb1WYhU4mE4ImVJ3nvzHSBd/exec"; // ← ここに③で控えたURLを入れる
+
+    const USE_APPS_SCRIPT = !!APPS_SCRIPT_URL;
+
+    const ADMIN_PASSWORD_DEFAULT = "admin110"; // LocalStorageモード用
+    const CATEGORIES = { shop:{label:'お店',color:'blue'}, public:{label:'公共施設',color:'green'}, home:{label:'個人宅・塾',color:'red'} };
+    const icons = {
+      red: new L.Icon({ iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',    shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png', iconSize:[25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41] }),
+      green:new L.Icon({ iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',  shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png', iconSize:[25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41] }),
+      blue: new L.Icon({ iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',   shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png', iconSize:[25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41] }),
+    };
+    const categoryToColor = (c)=>({shop:'blue',public:'green',home:'red'}[c]||'blue');
+
+    /************ 状態 ************/
+    const state = { isAdmin:false, markers:new Map(), pins:[], adminKey:null };
+    const els = {
+      statusBadge: document.getElementById('status-badge'),
+      locateBtn: document.getElementById('locateBtn'),
+      fitBtn: document.getElementById('fitBtn'),
+      exportBtn: document.getElementById('exportBtn'),
+      importFile: document.getElementById('importFile'),
+      helpBtn: document.getElementById('helpBtn'),
+      adminActions: document.getElementById('adminActions'),
+      gearBtn: document.getElementById('gearBtn'),
+      adminModal: document.getElementById('adminModal'),
+      modalBackdrop: document.getElementById('modalBackdrop'),
+      modalClose: document.getElementById('modalClose'),
+      loginAS: document.getElementById('loginAppsScript'),
+      adminKey: document.getElementById('adminKey'),
+      loginBtnAS: document.getElementById('loginBtnAS'),
+      logoutBtnAS: document.getElementById('logoutBtnAS'),
+      loginLocal: document.getElementById('loginLocal'),
+      adminPasswordLocal: document.getElementById('adminPasswordLocal'),
+      loginBtnLocal: document.getElementById('loginBtnLocal'),
+      logoutBtnLocal: document.getElementById('logoutBtnLocal'),
+    };
+
+    function uid(){ return 'm' + Math.random().toString(36).slice(2,8) + Date.now().toString(36); }
+    function normalizePin(raw){
+      const p = { ...raw };
+      if (!p.id) p.id = uid();
+      if (!p.name) p.name = '名称未設定';
+      p.lat = Number(p.lat); p.lng = Number(p.lng);
+      if (!p.category) { if (p.color==='red') p.category='home'; else if (p.color==='green') p.category='public'; else p.category='shop'; }
+      p.color = categoryToColor(p.category);
+      return p;
+    }
+
+    function setAdminMode(on){
+      state.isAdmin = !!on;
+      els.statusBadge.textContent = state.isAdmin ? '管理者モード' : '閲覧モード';
+      els.statusBadge.style.background = state.isAdmin ? '#e7f8ef' : '#eef4ff';
+      els.statusBadge.style.color = state.isAdmin ? '#127a43' : '#1f4ad7';
+      els.statusBadge.style.borderColor = state.isAdmin ? '#c7f0d7' : '#d8e4ff';
+      els.adminActions.style.display = state.isAdmin ? 'inline-flex' : 'none';
+      for (const mk of state.markers.values()) state.isAdmin ? mk.dragging.enable() : mk.dragging.disable();
+    }
+
+    /************ 地図 ************/
+    const map = L.map('map', { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, zoomControl:true, attributionControl:true });
+    const osmStd = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:20, minZoom:3, attribution:'&copy; OpenStreetMap contributors' });
+    osmStd.addTo(map);
+
+    function clearAllMarkers(){ for (const m of state.markers.values()) m.remove(); state.markers.clear(); }
+    function renderAllPins(){
+      clearAllMarkers();
+      state.pins.forEach(pin=>{
+        const marker = L.marker([pin.lat, pin.lng], { icon: icons[pin.color]||icons.blue, riseOnHover:true, draggable: state.isAdmin });
+        marker.on('dragend', async (ev)=>{
+          const ll = ev.target.getLatLng();
+          if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { lat:Number(ll.lat), lng:Number(ll.lng) }); await refreshRemotePins(); }
+          else { const p=state.pins.find(x=>x.id===pin.id); if(p){ p.lat=Number(ll.lat); p.lng=Number(ll.lng); savePinsLocal(); } }
+          if (marker.isPopupOpen()) marker.closePopup();
+        });
+
+        marker.bindTooltip(pin.name||'名称未設定', { sticky:true, direction:'top', className:'my-tooltip' });
+        marker.on('click', ()=>{
+          const container = document.createElement('div');
+          container.className='popup-form';
+          const opts = ['shop','public','home'].map(k=>{
+            const sel = k===pin.category ? 'selected':'';
+            const label = k==='shop'?'お店':k==='public'?'公共施設':'個人宅・塾';
+            return `<option value="${k}" ${sel}>${label}</option>`;
+          }).join('');
+          container.innerHTML = `
+            <div style="font-weight:700; margin-bottom:6px;">${escapeHtml(pin.name)}</div>
+            <div class="tip">カテゴリ：${pin.category==='shop'?'お店':pin.category==='public'?'公共施設':'個人宅・塾'}<br>緯度:${pin.lat.toFixed(6)} / 経度:${pin.lng.toFixed(6)}</div>
+            ${state.isAdmin ? `
+              <div class="actions" style="margin-top:8px;">
+                <button class="btn" id="renameBtn">名称変更</button>
+                <label class="label" for="catSel" style="margin-left:0;">カテゴリ</label>
+                <select id="catSel" style="flex:1; min-width:120px;">${opts}</select>
+                <button class="btn" id="applyCatBtn">反映</button>
+                <button class="danger" id="delBtn">削除</button>
+              </div>
+              <div class="tip">※ドラッグで位置を微調整できます</div>
+            ` : `<div class="tip" style="margin-top:8px;">（閲覧モード）</div>`}
+          `;
+          marker.bindPopup(container).openPopup();
+
+          if (state.isAdmin) {
+            container.querySelector('#delBtn').addEventListener('click', async ()=>{
+              if (!confirm(`「${pin.name}」のピンを削除します。よろしいですか？`)) return;
+              if (USE_APPS_SCRIPT) { await deletePinRemote(pin.id); await refreshRemotePins(); }
+              else { deletePinLocal(pin.id); }
+            });
+            container.querySelector('#renameBtn').addEventListener('click', async ()=>{
+              const newName = prompt('新しい名称を入力してください', pin.name);
+              if (!newName || !newName.trim()) return;
+              if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { name:newName.trim() }); await refreshRemotePins(); }
+              else { renamePinLocal(pin.id, newName.trim()); }
+              marker.closePopup();
+            });
+            container.querySelector('#applyCatBtn').addEventListener('click', async ()=>{
+              const sel = container.querySelector('#catSel').value;
+              if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { category: sel, color:categoryToColor(sel) }); await refreshRemotePins(); }
+              else { changeCategoryLocal(pin.id, sel); }
+              marker.closePopup();
+            });
+          }
+        });
+
+        marker.addTo(map);
+        state.markers.set(pin.id, marker);
+      });
+    }
+    function fitToPins(){ if(!state.pins.length) return; const b=L.latLngBounds(state.pins.map(p=>[p.lat,p.lng])); map.fitBounds(b.pad(0.2)); }
+
+    map.on('click', (e)=>{
+      if (!state.isAdmin) return;
+      const form = document.createElement('div');
+      form.className='popup-form';
+      const options = ['shop','public','home'].map(k=>{
+        const label = k==='shop'?'お店':k==='public'?'公共施設':'個人宅・塾';
+        return `<option value="${k}">${label}</option>`;
+      }).join('');
+      form.innerHTML = `
+        <div style="font-weight:700; margin-bottom:8px;">ピンを追加</div>
+        <label class="label">名称</label>
+        <input id="placeNameInput" type="text" placeholder="例：山田さん宅 / ローソン / 市役所" />
+        <label class="label" style="margin-top:6px;">カテゴリ</label>
+        <select id="categorySelect">${options}</select>
+        <div class="tip">位置：${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}</div>
+        <div class="actions">
+          <button class="primary" id="savePin">保存</button>
+          <button class="btn" id="cancelPin">キャンセル</button>
+        </div>`;
+      const temp = L.popup().setLatLng(e.latlng).setContent(form).openOn(map);
+      form.querySelector('#placeNameInput').focus();
+      form.querySelector('#savePin').addEventListener('click', async ()=>{
+        const name = form.querySelector('#placeNameInput').value.trim();
+        const cat  = form.querySelector('#categorySelect').value;
+        if (!name) { alert('名称を入力してください'); return; }
+        if (USE_APPS_SCRIPT) {
+          const pin = normalizePin({ id: uid(), name, lat:e.latlng.lat, lng:e.latlng.lng, category:cat });
+          await addPinRemote(pin); await refreshRemotePins();
+        } else {
+          addPinLocal(name, e.latlng, cat);
+        }
+        map.closePopup(temp);
+      });
+      form.querySelector('#cancelPin').addEventListener('click', ()=> map.closePopup(temp));
+    });
+
+    /************ LocalStorage ************/
+    function savePinsLocal(){ localStorage.setItem('kids110_pins', JSON.stringify(state.pins)); }
+    function loadPinsLocal(){
+      try { const raw=localStorage.getItem('kids110_pins'); state.pins = raw? JSON.parse(raw): []; }
+      catch(e){ state.pins=[]; }
+      state.pins = state.pins.map(normalizePin);
+    }
+    function addPinLocal(name, latlng, category='shop'){
+      const pin = normalizePin({ id: uid(), name: name||'名称未設定', lat:latlng.lat, lng:latlng.lng, category });
+      state.pins.push(pin); savePinsLocal(); renderAllPins();
+    }
+    function deletePinLocal(id){ const i=state.pins.findIndex(p=>p.id===id); if(i>=0){ state.pins.splice(i,1); savePinsLocal(); renderAllPins(); } }
+    function renamePinLocal(id, newName){ const p=state.pins.find(x=>x.id===id); if(!p) return; p.name=newName; savePinsLocal(); renderAllPins(); }
+    function changeCategoryLocal(id, newCat){ const p=state.pins.find(x=>x.id===id); if(!p) return; p.category=newCat; p.color=categoryToColor(newCat); savePinsLocal(); renderAllPins(); }
+
+    /************ Apps Script 通信 ************/
+    async function refreshRemotePins(){
+      const res = await fetch(APPS_SCRIPT_URL, { method:'GET', mode:'cors' });
+      const obj = await res.json();
+      if (!obj || !Array.isArray(obj.pins)) throw new Error('GET invalid');
+      state.pins = obj.pins.map(normalizePin);
+      renderAllPins();
+      if (state.pins.length && !refreshRemotePins._fitted) { fitToPins(); refreshRemotePins._fitted = true; }
+    }
+    // （修正後）GASへPOST。Content－Typeヘッダーはつけない＝プリフライト会費
+    async function postAS(payload){
+      const body = JSON.stringify(Object.assign({}, payload, { adminKey: state.adminKey || '' }));
+      const res  = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'cors',        // CORSでOK。プリフライトは発生しない
+        body
+      });
+
+      // GASはたまに text/plain で返すので、まずは text で取り、手動で JSON 解析
+      const text = await res.text();
+      let obj;
+      try { obj = JSON.parse(text); }
+      catch(e){ throw new Error('サーバ応答が不正です: ' + text.slice(0,200)); }
+    
+      if (!obj.ok) throw new Error(obj.error || 'POST failed');
+      return obj;
+    }
+
+    const addPinRemote    = (pin)=> postAS({ op:'add', pin });
+    const updatePinRemote = (id, fields)=> postAS({ op:'update', id, fields });
+    const deletePinRemote = (id)=> postAS({ op:'delete', id });
+
+    /************ ボタン ************/
+    els.locateBtn.addEventListener('click', ()=>{
+      if (!navigator.geolocation) return alert('このブラウザは現在地取得に対応していません。');
+      navigator.geolocation.getCurrentPosition(
+        (pos)=>{ map.setView([pos.coords.latitude, pos.coords.longitude], 16);
+                 const c=L.circle([pos.coords.latitude, pos.coords.longitude], { radius:20, color:'#0a7cff' }).addTo(map);
+                 setTimeout(()=>c.remove(),3000); },
+        (err)=> alert('現在地を取得できませんでした: ' + err.message),
+        { enableHighAccuracy:true, timeout:8000 }
+      );
+    });
+    els.fitBtn.addEventListener('click', ()=>{ if (state.pins.length) fitToPins(); else map.setView(DEFAULT_CENTER, DEFAULT_ZOOM); });
+
+    els.exportBtn.addEventListener('click', ()=>{
+      if (!state.isAdmin) return alert('エクスポートは管理者のみです');
+      const dataStr = JSON.stringify({ pins: state.pins }, null, 2);
+      const blob = new Blob([dataStr], { type:'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download=`kids110_pins_${new Date().toISOString().slice(0,10)}.json`; a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    els.importFile.addEventListener('change', async (e)=>{
+      const file = e.target.files?.[0]; if(!file) return;
+      if (!state.isAdmin) { alert('インポートは管理者のみです'); e.target.value=''; return; }
+      const reader = new FileReader();
+      reader.onload = async ()=>{
+        try{
+          const obj = JSON.parse(reader.result);
+          if (!obj || !Array.isArray(obj.pins)) throw new Error('不正なファイル形式です');
+          const pins = obj.pins.map(normalizePin);
+          if (USE_APPS_SCRIPT) {
+            await postAS({ op:'import', pins });
+            await refreshRemotePins();
+          } else {
+            state.pins = pins; savePinsLocal(); renderAllPins(); fitToPins();
+          }
+          alert('インポートしました');
+        }catch(err){ alert('インポート失敗：' + err.message); }
+        finally{ e.target.value=''; }
+      };
+      reader.readAsText(file, 'utf-8');
+    });
+
+    if (document.getElementById('helpBtn')) {
+      document.getElementById('helpBtn').addEventListener('click', ()=>{
+        alert([
+          USE_APPS_SCRIPT ? '【モード】Apps Script（全員で同じデータを共有）' : '【モード】LocalStorage（この端末のみ）',
+          '・地図の種類は右上レイヤ切替（OSM）',
+          '・管理者：地図クリックで追加／ポップアップから名称・カテゴリ変更／削除',
+          '・管理者：ドラッグで位置微調整',
+          '・JSONのエクスポート／インポート対応（互換）',
+          USE_APPS_SCRIPT ? '・ログイン：歯車 → 管理者キーを入力（GASのADMIN_KEY）' : '・ログイン：歯車 → ローカルパスワード（初期: admin110）'
+        ].join('\n'));
+      });
+    }
+
+    /************ モーダル＆ログイン ************/
+    function openModal(){
+      document.getElementById('adminModal').classList.add('show');
+      document.getElementById('adminModal').setAttribute('aria-hidden','false');
+      if (USE_APPS_SCRIPT) {
+        els.loginAS.style.display='block'; els.loginLocal.style.display='none'; els.adminKey.value='';
+      } else {
+        els.loginAS.style.display='none'; els.loginLocal.style.display='block'; els.adminPasswordLocal.value='';
+      }
+    }
+    function closeModal(){
+      document.getElementById('adminModal').classList.remove('show');
+      document.getElementById('adminModal').setAttribute('aria-hidden','true');
+    }
+    els.gearBtn.addEventListener('click', openModal);
+    els.modalClose.addEventListener('click', closeModal);
+    els.modalBackdrop.addEventListener('click', closeModal);
+    window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
+
+    // Apps Script ログイン
+    if (USE_APPS_SCRIPT) {
+      els.loginBtnAS.addEventListener('click', ()=>{
+        const key = (els.adminKey.value||'').trim();
+        if (!key) return alert('管理者キーを入力してください');
+        state.adminKey = key; setAdminMode(true); closeModal(); alert('管理者モードになりました');
+      });
+      els.logoutBtnAS.addEventListener('click', ()=>{
+        state.adminKey = null; setAdminMode(false); closeModal(); alert('閲覧モードになりました');
+      });
+    } else {
+      // LocalStorage ログイン
+      const getPwLocal = ()=> localStorage.getItem('kids110_admin_pw') || ADMIN_PASSWORD_DEFAULT;
+      els.loginBtnLocal.addEventListener('click', ()=>{
+        const pw = (els.adminPasswordLocal.value||'').trim();
+        if (!pw) return alert('パスワードを入力してください');
+        if (pw === getPwLocal()) { setAdminMode(true); closeModal(); alert('管理者モードになりました'); }
+        else alert('パスワードが違います');
+      });
+      els.logoutBtnLocal.addEventListener('click', ()=>{ setAdminMode(false); closeModal(); alert('閲覧モードになりました'); });
+      window.setAdminPassword = (newPw)=> localStorage.setItem('kids110_admin_pw', newPw); // 任意
+    }
+
+    /************ 初期化 ************/
+    (async function init(){
+      if (USE_APPS_SCRIPT) {
+        try { await refreshRemotePins(); } catch(e){ console.error(e); alert('サーバからデータを取得できませんでした'); }
+        setAdminMode(false);
+      } else {
+        loadPinsLocal(); renderAllPins(); setAdminMode(sessionStorage.getItem('kids110_admin')==='1'); if (state.pins.length) fitToPins();
+      }
+    })();
+
+    function escapeHtml(s){ return String(s).replace(/[&<>"'`=\/]/g, c=>({'&':'&amp;','<':'&lt;','>':'&#62;','"':'&quot;',"'":'&#39;','/':'&#x2F;','`':'&#x60','=':'&#x3D;'}[c])); }
+  </script>
+</body>
+</html>
