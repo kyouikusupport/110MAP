@@ -189,6 +189,8 @@
     const osmStd = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom:20, minZoom:3, attribution:'&copy; OpenStreetMap contributors'
     });
+
+    // 国土地理院：標準は読み込み不具合があるため「std（代替）」を標準名で割当
     const gsiStd = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/standard/{z}/{x}/{y}.png', {
       maxZoom:18, minZoom:2, attribution:'地理院タイル（標準地図）',
       errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
@@ -197,6 +199,7 @@
       maxZoom:18, minZoom:2, attribution:'地理院タイル（標準地図・代替）',
       errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
     });
+
     const gsiPale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
       maxZoom:18, minZoom:2, attribution:'地理院タイル（淡色地図）'
     });
@@ -207,7 +210,7 @@
       maxZoom:19, minZoom:2, attribution:'Tiles &copy; Esri'
     });
 
-    // 任意：MapTiler Streets を使う場合はキーを設定して次の行を有効に
+    // 任意：MapTiler Streets
     const MAPTILER_KEY = ""; // 例: "pA1b2C3..."
     const mapTilerStreets = MAPTILER_KEY
       ? L.tileLayer(`https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`, {
@@ -217,15 +220,17 @@
 
     // 既定は OSM
     osmStd.addTo(map);
+
+    // ★ ここが変更点：UI上の「国土地理院 標準地図」は gsiStdAlt を指す。代替の選択肢は出さない。
     const baseLayers = {
       "OpenStreetMap（標準）": osmStd,
-      "国土地理院 標準地図": gsiStd,
-      "国土地理院 標準地図（代替）": gsiStdAlt,
+      "国土地理院 標準地図": gsiStdAlt,     // ← 代替タイルを割当
       "国土地理院 淡色地図": gsiPale,
       "国土地理院 航空写真": gsiPhoto,
       "Esri 航空写真": esriWorldImg
     };
     if (mapTilerStreets) baseLayers["MapTiler Streets（POI多め）"] = mapTilerStreets;
+
     L.control.layers(baseLayers, null, { position: 'topright', collapsed: true }).addTo(map);
 
     function clearAllMarkers(){ for (const m of state.markers.values()) m.remove(); state.markers.clear(); }
