@@ -68,6 +68,7 @@
     .row{ display:flex; gap:8px; align-items:center; margin:8px 0; } .row input{ flex:1; padding:8px 10px; border:1px solid #d7d7e0; border-radius:8px; font-size:14px; }
     .tip{ font-size:12px; color:var(--muted); line-height:1.4; }
     #adminActions{ display:none; align-items:center; gap:8px; }
+    .divider{ height:1px; background:#e5e7eb; margin:10px 0; }
   </style>
 </head>
 <body>
@@ -105,7 +106,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 1 1 7.04 3.4l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06A2 2 0 1 1 20.6 7.04l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.39 1.26 1 1.51.2.09.41.14.64.14H22a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
   </button>
 
-  <!-- 管理者モーダル（Apps Script / LocalStorage） -->
+  <!-- 管理者モーダル（Apps Script） -->
   <div id="adminModal" class="modal" aria-hidden="true">
     <div class="backdrop" id="modalBackdrop"></div>
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="adminModalTitle">
@@ -123,6 +124,16 @@
           <button id="logoutBtnAS" class="danger">ログアウト</button>
         </div>
         <div class="tip">※ 管理者キーはサーバ側（Apps Script）に設定します。クライアントには保存されません。</div>
+
+        <!-- 管理者キー変更（管理者モード時に表示） -->
+        <div id="changeKeySection" style="display:none;">
+          <div class="divider"></div>
+          <div class="tip" style="margin-bottom:6px;">管理者キー（パスワード）変更</div>
+          <div class="row"><input id="newKey1" type="password" placeholder="新しいキー（8文字以上推奨）"></div>
+          <div class="row"><input id="newKey2" type="password" placeholder="新しいキー（確認）"></div>
+          <div class="row"><button id="changeKeyBtn" class="primary">変更する</button></div>
+          <div class="tip">※ 現在のキーで認証済みの間にのみ変更できます。変更後は新しいキーでログインしてください。</div>
+        </div>
       </div>
     </div>
   </div>
@@ -132,8 +143,8 @@
     const DEFAULT_CENTER = [35.662, 138.488];
     const DEFAULT_ZOOM = 13;
 
-    // Apps Script の WebアプリURL（〜/exec）
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUVDUuB1Eac9CDzbAghUgJlCVvbhTmI6j_r3f-6R-pdtb1WYhU4mE4ImVJ3nvzHSBd/exec";
+    // Apps Script の WebアプリURL（〜/exec）に差し替えてください
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/___YOUR_EXEC_URL___/exec";
 
     const USE_APPS_SCRIPT = !!APPS_SCRIPT_URL;
 
@@ -160,6 +171,10 @@
       modalBackdrop: document.getElementById('modalBackdrop'),
       modalClose: document.getElementById('modalClose'),
       adminKey: document.getElementById('adminKey'),
+      changeKeySection: document.getElementById('changeKeySection'),
+      newKey1: document.getElementById('newKey1'),
+      newKey2: document.getElementById('newKey2'),
+      changeKeyBtn: document.getElementById('changeKeyBtn'),
 
       legendBtn: document.getElementById('legendBtn'),
       legendOverlay: document.getElementById('legendOverlay'),
@@ -185,6 +200,7 @@
       els.statusBadge.style.color = state.isAdmin ? '#127a43' : '#1f4ad7';
       els.statusBadge.style.borderColor = state.isAdmin ? '#c7f0d7' : '#d8e4ff';
       els.adminActions.style.display = state.isAdmin ? 'inline-flex' : 'none';
+      els.changeKeySection.style.display = state.isAdmin ? 'block' : 'none';
       for (const mk of state.markers.values()) state.isAdmin ? mk.dragging.enable() : mk.dragging.disable();
       if (wasAdmin && !state.isAdmin) { map.closePopup(); }
     }
@@ -193,7 +209,7 @@
     const map = L.map('map', { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, zoomControl:true, attributionControl:true });
 
     const osmStd = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:20, minZoom:3, attribution:'&copy; OpenStreetMap contributors' });
-    // 国土地理院 標準地図 ⇒ std（代替タイル）を「標準地図」として使用
+    // 国土地理院 標準地図 ⇒ std（代替タイル）を「標準地図」として利用
     const gsiStandard = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
       maxZoom: 18, minZoom: 2, attribution: '地理院タイル（標準地図）',
       errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
@@ -226,12 +242,9 @@
           else { const p=state.pins.find(x=>x.id===pin.id); if(p){ p.lat=Number(ll.lat); p.lng=Number(ll.lng); savePinsLocal(); renderAllPins(); } }
         });
 
-        // ★ ツールチップを「ピンの頭上」にずらす（上方向へ36px）
+        // ツールチップ（ピンの頭上にオフセット）
         marker.bindTooltip(pin.name||'名称未設定', {
-          sticky:true,
-          direction:'top',
-          offset:[0,-36],
-          className:'my-tooltip'
+          sticky:true, direction:'top', offset:[0,-36], className:'my-tooltip'
         });
 
         marker.on('click', ()=>{
@@ -402,20 +415,23 @@
         alert([
           '【モード】Apps Script（全員で同じデータを共有）',
           '・右上のレイヤ切替で地図の種類を変更できます（国土地理院・航空写真など）。',
-          '・閲覧モード：ピンは名前のツールチップのみ表示（ポップアップ無し／頭上表示）',
+          '・閲覧モード：ピンは名前のツールチップのみ（頭上表示）',
           '・管理者モード：地図クリックで追加／ピンのポップアップから名称・カテゴリ変更／削除可',
           '・管理者モード中はピンをドラッグで微調整できます',
           '・エクスポート／インポートでJSONを保存・読み込み可能（形式互換）',
-          '・ログイン：左下の歯車 → 管理者キーを入力（GASのADMIN_KEY）'
+          '・ログイン：左下の歯車 → 管理者キー',
+          '・管理者キー変更：左下の歯車 → フォームで変更（要ログイン）'
         ].join('\n'));
       });
     }
 
-    /************ モーダル＆ログイン ************/
+    /************ モーダル＆ログイン／キー変更 ************/
     function openModal(){
       els.adminModal.classList.add('show');
       els.adminModal.setAttribute('aria-hidden','false');
       els.adminKey.value = '';
+      els.newKey1.value = els.newKey2.value = '';
+      els.changeKeySection.style.display = state.isAdmin ? 'block' : 'none';
     }
     function closeModal(){
       els.adminModal.classList.remove('show');
@@ -423,10 +439,10 @@
     }
     els.gearBtn.addEventListener('click', openModal);
     els.modalClose.addEventListener('click', closeModal);
-    document.getElementById('modalBackdrop').addEventListener('click', closeModal);
+    els.modalBackdrop.addEventListener('click', closeModal);
     window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
 
-    // Apps Script ログイン
+    // ログイン/ログアウト
     document.getElementById('loginBtnAS').addEventListener('click', ()=>{
       const key = (els.adminKey.value||'').trim();
       if (!key) return alert('管理者キーを入力してください');
@@ -436,17 +452,23 @@
       state.adminKey = null; setAdminMode(false); closeModal(); alert('閲覧モードになりました');
     });
 
-    /************ カテゴリ（凡例）開閉 ************/
-    function openLegend(){ els.legendOverlay.classList.add('show'); els.legendOverlay.setAttribute('aria-hidden','false'); }
-    function closeLegend(){ els.legendOverlay.classList.remove('show'); els.legendOverlay.setAttribute('aria-hidden','true'); }
-    els.legendBtn.addEventListener('click', openLegend);
-    els.legendBackdrop.addEventListener('click', closeLegend);
-    document.addEventListener('click', (e)=>{
-      const panel = els.legendOverlay.querySelector('.panel');
-      if (!els.legendOverlay.classList.contains('show')) return;
-      if (!panel.contains(e.target) && e.target !== els.legendBtn) closeLegend();
+    // 管理者キー変更
+    els.changeKeyBtn.addEventListener('click', async ()=>{
+      if (!state.isAdmin) return alert('管理者モードでのみ変更できます');
+      const n1 = (els.newKey1.value||'').trim();
+      const n2 = (els.newKey2.value||'').trim();
+      if (!n1 || n1.length < 8) return alert('新しいキーは8文字以上にしてください');
+      if (n1 !== n2) return alert('確認用キーが一致しません');
+      if (!confirm('管理者キーを変更します。続行しますか？')) return;
+      try{
+        await postAS({ op:'changeKey', newKey: n1 });
+        state.adminKey = n1; // 以降の操作で新キーを使用
+        els.newKey1.value = els.newKey2.value = '';
+        alert('管理者キーを変更しました');
+      }catch(e){
+        alert('変更に失敗しました：' + (e.message||e));
+      }
     });
-    window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeLegend(); });
 
     /************ 初期化 ************/
     (async function init(){
@@ -462,4 +484,3 @@
   </script>
 </body>
 </html>
-
