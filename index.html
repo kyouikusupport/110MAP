@@ -42,9 +42,16 @@
     .legend-overlay.show{ display:block; }
     .legend-overlay .backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.35); }
     .legend-overlay .panel{
-      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      position:absolute;
+      right:12px;            /* 画面右端から12px（カテゴリボタンと揃える） */
+      bottom:60px;           /* ボタンの少し上に配置（ボタンが bottom:12px なので +48px くらい余裕） */
+      transform:none;        /* センター配置を無効化 */
+    
       background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:var(--shadow);
-      padding:12px 14px; width:min(92vw, 360px);
+      padding:12px 14px;
+      width:min(92vw, 360px);
+      max-height:60vh;       /* スマホでもはみ出しにくいように */
+      overflow:auto;         /* はみ出したらスクロール */
     }
     .legend-overlay h3{ margin:0 0 8px; font-size:15px; }
     .legend-overlay .item{ display:flex; align-items:center; gap:8px; margin:6px 0; font-size:14px; }
@@ -565,3 +572,4 @@
   </script>
 </body>
 </html>
+
