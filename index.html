@@ -103,7 +103,7 @@
 
   <!-- 歯車（管理者） -->
   <button id="gearBtn" class="gear-btn" aria-label="管理者設定">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 1 1 7.04 3.4l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06A2 2 0 1 1 20.6 7.04l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.39 1.26 1 1.51.2.09.41.14.64.14H22a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1Z"/></svg>
   </button>
 
   <!-- 管理者モーダル（Apps Script） -->
@@ -341,7 +341,7 @@
           container.querySelector('#applyCatBtn').addEventListener('click', async ()=>{
             const sel = container.querySelector('#catSel').value;
             if (USE_APPS_SCRIPT) { await updatePinRemote(pin.id, { category: sel, color:categoryToColor(sel) }); await refreshRemotePins(); }
-            else { changeCategoryLocal(pin.id, sel); }
+            else { changeCategoryLocal(pin.id); }
             marker.closePopup();
           });
         });
@@ -524,6 +524,32 @@
         alert('変更に失敗しました：' + (e.message||e));
       }
     });
+
+    /************ カテゴリ（凡例）ウインドウの開閉 ************/
+    function openLegend(){
+      els.legendOverlay.classList.add('show');
+      els.legendOverlay.setAttribute('aria-hidden', 'false');
+    }
+    function closeLegend(){
+      els.legendOverlay.classList.remove('show');
+      els.legendOverlay.setAttribute('aria-hidden', 'true');
+    }
+    // ボタンで開閉（トグル）
+    els.legendBtn.addEventListener('click', ()=>{
+      const isOpen = els.legendOverlay.classList.contains('show');
+      isOpen ? closeLegend() : openLegend();
+    });
+    // 背景タップで閉じる
+    els.legendBackdrop.addEventListener('click', closeLegend);
+    // オーバーレイ領域のクリックで、パネル以外をクリックしたら閉じる
+    els.legendOverlay.addEventListener('click', (e)=>{
+      // 直接 overlay をクリックしたときのみ閉じる（子要素のパネルクリックは無視）
+      if (e.target === els.legendOverlay) closeLegend();
+    });
+    // Escape キーで閉じる
+    window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeLegend(); });
+    // 地図クリックでも閉じる
+    map.on('click', closeLegend);
 
     /************ 初期化 ************/
     (async function init(){
