@@ -33,6 +33,44 @@
     .leaflet-tooltip.my-tooltip{ background:#111; color:#fff; border:none; border-radius:6px; padding:6px 8px; font-size:12px; box-shadow:0 6px 16px rgba(0,0,0,.25); }
     .popup-form{ min-width:240px; } .popup-form .actions{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
 
+    /* 外部画像を使わないCSSピン */
+    .css-pin{
+      width:25px;
+      height:41px;
+      position:relative;
+    }
+
+    .css-pin::before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:0;
+      width:24px;
+      height:24px;
+      transform:translateX(-50%) rotate(45deg);
+      border-radius:50% 50% 50% 0;
+      background:var(--pin-color, #2e7cff);
+      border:2px solid #ffffff;
+      box-shadow:0 2px 6px rgba(0,0,0,.35);
+    }
+
+    .css-pin::after{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:7px;
+      width:8px;
+      height:8px;
+      transform:translateX(-50%);
+      border-radius:999px;
+      background:#ffffff;
+      opacity:.95;
+    }
+
+    .css-pin.blue{ --pin-color:#2e7cff; }
+    .css-pin.green{ --pin-color:#2fbf71; }
+    .css-pin.red{ --pin-color:#e23b3b; }
+
     /* カテゴリ（凡例）ボタンとパネル */
     .legend-btn{
       position:absolute; right:12px; bottom:12px; z-index:950;
@@ -156,9 +194,30 @@
 
     const CATEGORIES = { shop:{label:'お店',color:'blue'}, public:{label:'公共施設',color:'green'}, home:{label:'個人宅・塾',color:'red'} };
     const icons = {
-      red: new L.Icon({ iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',    shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png', iconSize:[25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41] }),
-      green:new L.Icon({ iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',  shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png', iconSize:[25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41] }),
-      blue: new L.Icon({ iconUrl:'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',   shadowUrl:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png', iconSize:[25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41] }),
+      red: L.divIcon({
+        className: '',
+        html: '<div class="css-pin red"></div>',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        tooltipAnchor: [0, -36]
+      }),
+      green: L.divIcon({
+        className: '',
+        html: '<div class="css-pin green"></div>',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        tooltipAnchor: [0, -36]
+      }),
+      blue: L.divIcon({
+        className: '',
+        html: '<div class="css-pin blue"></div>',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        tooltipAnchor: [0, -36]
+      }),
     };
     const categoryToColor = (c)=>({shop:'blue',public:'green',home:'red'}[c]||'blue');
 
