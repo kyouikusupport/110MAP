@@ -33,13 +33,14 @@
     .leaflet-tooltip.my-tooltip{ background:#111; color:#fff; border:none; border-radius:6px; padding:6px 8px; font-size:12px; box-shadow:0 6px 16px rgba(0,0,0,.25); }
     .popup-form{ min-width:240px; } .popup-form .actions{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
 
-    /* 外部画像を使わないCSSピン */
+    /* 外部画像を使わないCSSピン：丸＋白い丸＋下三角 */
     .css-pin{
       width:25px;
       height:41px;
       position:relative;
     }
 
+    /* 上の色つき丸 */
     .css-pin::before{
       content:"";
       position:absolute;
@@ -47,24 +48,42 @@
       top:0;
       width:24px;
       height:24px;
-      transform:translateX(-50%) rotate(45deg);
-      border-radius:50% 50% 50% 0;
+      transform:translateX(-50%);
+      border-radius:999px;
       background:var(--pin-color, #2e7cff);
       border:2px solid #ffffff;
       box-shadow:0 2px 6px rgba(0,0,0,.35);
+      z-index:2;
     }
 
+    /* 下の三角 */
     .css-pin::after{
       content:"";
       position:absolute;
       left:50%;
-      top:7px;
+      top:24px;
+      transform:translateX(-50%);
+      width:0;
+      height:0;
+      border-left:8px solid transparent;
+      border-right:8px solid transparent;
+      border-top:14px solid var(--pin-color, #2e7cff);
+      filter:drop-shadow(0 2px 2px rgba(0,0,0,.25));
+      z-index:1;
+    }
+
+    /* 中央の白い丸 */
+    .css-pin .pin-dot{
+      position:absolute;
+      left:50%;
+      top:8px;
       width:8px;
       height:8px;
       transform:translateX(-50%);
       border-radius:999px;
       background:#ffffff;
-      opacity:.95;
+      z-index:3;
+      box-shadow:0 0 1px rgba(0,0,0,.18);
     }
 
     .css-pin.blue{ --pin-color:#2e7cff; }
@@ -79,11 +98,10 @@
     .legend-overlay{ position:fixed; inset:0; display:none; z-index:1001; }
     .legend-overlay.show{ display:block; }
     .legend-overlay .backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.35); }
-    /* ← 位置を「カテゴリ」ボタンのすぐ上へ */
     .legend-overlay .panel{
       position:absolute;
       right:12px;
-      bottom:60px;         /* ボタンのすぐ上 */
+      bottom:60px;
       transform:none;
       background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:var(--shadow);
       padding:12px 14px; width:min(92vw, 360px); max-height:60vh; overflow:auto;
@@ -196,7 +214,7 @@
     const icons = {
       red: L.divIcon({
         className: '',
-        html: '<div class="css-pin red"></div>',
+        html: '<div class="css-pin red"><span class="pin-dot"></span></div>',
         iconSize: [25, 41],
         iconAnchor: [12, 41],
         popupAnchor: [1, -34],
@@ -204,7 +222,7 @@
       }),
       green: L.divIcon({
         className: '',
-        html: '<div class="css-pin green"></div>',
+        html: '<div class="css-pin green"><span class="pin-dot"></span></div>',
         iconSize: [25, 41],
         iconAnchor: [12, 41],
         popupAnchor: [1, -34],
@@ -212,7 +230,7 @@
       }),
       blue: L.divIcon({
         className: '',
-        html: '<div class="css-pin blue"></div>',
+        html: '<div class="css-pin blue"><span class="pin-dot"></span></div>',
         iconSize: [25, 41],
         iconAnchor: [12, 41],
         popupAnchor: [1, -34],
@@ -273,7 +291,6 @@
       els.changeKeySection.style.display = state.isAdmin ? 'block' : 'none';
       for (const mk of state.markers.values()) state.isAdmin ? mk.dragging.enable() : mk.dragging.disable();
       if (wasAdmin && !state.isAdmin) { map.closePopup(); }
-      // 閲覧モードへの切替時はクリック表示中のツールチップを閉じる
       if (!state.isAdmin && lastClickedMarker) {
         lastClickedMarker.closeTooltip();
         if (lastClickedMarker._hoverTT) {
@@ -288,7 +305,6 @@
     const map = L.map('map', { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, zoomControl:true, attributionControl:true });
 
     const osmStd = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:20, minZoom:3, attribution:'&copy; OpenStreetMap contributors' });
-    // 国土地理院 標準地図 ⇒ std（代替タイル）を「標準地図」として利用
     const gsiStandard = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
       maxZoom: 18, minZoom: 2, attribution: '地理院タイル（標準地図）',
       errorTileUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
@@ -313,7 +329,7 @@
       return state.pins.filter(p => p.category === state.activeFilter);
     }
     function setFilter(filter){
-      state.activeFilter = (filter === 'all') ? null : filter; // null=全件
+      state.activeFilter = (filter === 'all') ? null : filter;
       renderAllPins();
     }
 
@@ -335,24 +351,20 @@
           else { const p=state.pins.find(x=>x.id===pin.id); if(p){ p.lat=Number(ll.lat); p.lng=Number(ll.lng); savePinsLocal(); renderAllPins(); } }
         });
 
-        // ツールチップ：ホバー用（カーソル位置＝offset[0,0], sticky:true）とクリック用（ピン頭上＝offset[0,-36]）
         const nameText = pin.name || '名称未設定';
         const hoverTT = L.tooltip({direction:'top', sticky:true, offset:[0,0], className:'my-tooltip'}).setContent(nameText);
         const clickTT = L.tooltip({direction:'top', sticky:false, offset:[0,-36], className:'my-tooltip'}).setContent(nameText);
         marker._hoverTT = hoverTT;
         marker._clickTT = clickTT;
 
-        // 既定はホバー用をバインド
         marker.bindTooltip(hoverTT);
 
-        // ホバー時（PC）
         marker.on('mouseover', ()=>{
           if (marker.getTooltip() !== hoverTT) { marker.unbindTooltip(); marker.bindTooltip(hoverTT); }
           marker.openTooltip();
         });
         marker.on('mouseout', ()=>{ marker.closeTooltip(); });
 
-        // クリック時：閲覧モードはクリック用名のみ／管理者モードは編集
         marker.on('click', ()=>{
           if (!state.isAdmin) {
             if (lastClickedMarker && lastClickedMarker !== marker) {
@@ -385,7 +397,6 @@
             return;
           }
 
-          // --- 管理者モード：編集ポップアップ ---
           const container = document.createElement('div');
           container.className='popup-form';
           const opts = ['shop','public','home'].map(k=>{
@@ -433,12 +444,11 @@
 
     function fitToPins(){
       if(!state.pins.length) return;
-      const pins = getVisiblePins(); // フィルタ中は表示中ピンでフィット
+      const pins = getVisiblePins();
       if (!pins.length) return;
       const b=L.latLngBounds(pins.map(p=>[p.lat,p.lng])); map.fitBounds(b.pad(0.2));
     }
 
-    // 地図クリック→追加（管理者のみ）
     map.on('click', (e)=>{
       if (!state.isAdmin) return;
       const form = document.createElement('div');
@@ -513,7 +523,6 @@
     const deletePinRemote = (id)=> postAS({ op:'delete', id });
 
     /************ ボタン ************/
-    // 現在地へ：ズームは変更しない（既存のズームを維持）
     els.locateBtn.addEventListener('click', ()=>{
       if (!navigator.geolocation) return alert('このブラウザは現在地取得に対応していません。');
       navigator.geolocation.getCurrentPosition(
@@ -627,7 +636,6 @@
     els.legendBackdrop.addEventListener('click', closeLegend);
     window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeLegend(); });
 
-    // クリックでフィルタ → パネルを閉じる
     function handleLegendClick(filter){
       setFilter(filter);
       closeLegend();
